@@ -1,0 +1,181 @@
+name: Windows build
+description: MSYS2 环境配置、编译、测试，并可选打包（runtime 收集 + Inno Setup 安装包 + zip）（供三个构建流水线复用）
+
+inputs:
+  build-dir:
+    description: CMake 构建目录
+    required: false
+    default: build
+  version:
+    description: 打包使用的版本号；为空则自动从 CMakeLists.txt 提取
+    required: false
+    default: ''
+  package:
+    description: 是否执行打包（收集运行时依赖、Inno Setup 安装包、zip 压缩包）
+    required: false
+    type: boolean
+    default: false
+  artifact-prefix:
+    description: 上传产物名前缀；留空则不上传
+    required: false
+    default: ''
+
+outputs:
+  version:
+    description: 实际使用的版本号（input 或自动提取）
+    value: ${{ steps.extract.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          git
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-ninja
+          mingw-w64-ucrt-x86_64-qt6-base
+          mingw-w64-ucrt-x86_64-qt6-declarative
+          mingw-w64-ucrt-x86_64-qt6-svg
+          mingw-w64-ucrt-x86_64-qt6-tools
+
+    - name: Show Qt version
+      shell: msys2 {0}
+      run: |
+        qmake6 -query QT_VERSION
+        qmake6 -query QT_INSTALL_PREFIX
+        which windeployqt
+        test -f /ucrt64/share/qt6/bin/qmlimportscanner.exe
+
+    - name: Extract project version
+      id: extract
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+        else
+          VERSION="$(grep -E '^project\(QtEasyTier VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+          if [ -z "$VERSION" ]; then
+            echo "Failed to extract version from CMakeLists.txt" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Configure
+      shell: msys2 {0}
+      run: |
+        cmake -S . -B "${{ inputs.build-dir }}" \
+          -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      shell: msys2 {0}
+      run: |
+        cmake --build "${{ inputs.build-dir }}" --parallel "$(nproc)"
+
+    - name: Run tests
+      shell: msys2 {0}
+      env:
+        QT_QPA_PLATFORM: offscreen
+      run: |
+        ctest --test-dir "${{ inputs.build-dir }}" --output-on-failure
+
+    - name: Prepare runtime files
+      if: ${{ inputs.package }}
+      shell: msys2 {0}
+      run: |
+        find "${{ inputs.build-dir }}/Output" -maxdepth 1 -type f \( -name '*.a' -o -name '*.lib' -o -name 'tst*' \) -delete
+        export PATH="/ucrt64/share/qt6/bin:$PATH"
+        cd "${{ inputs.build-dir }}/Output"
+        windeployqt.exe --release --force \
+          --qmldir ../../src/qml \
+          --qml-deploy-dir ./share/qt6/qml \
+          ./appQtEasyTier.exe
+
+        iter=0
+        changed=1
+        while [ "$changed" -eq 1 ] && [ "$iter" -lt 10 ]; do
+          changed=0
+          iter=$((iter + 1))
+          while IFS= read -r -d '' file; do
+            while IFS= read -r dll; do
+              if [ -f "/ucrt64/bin/$dll" ] && [ ! -f "./$dll" ]; then
+                cp "/ucrt64/bin/$dll" .
+                changed=1
+              fi
+            done < <(objdump -p "$file" 2>/dev/null | awk '/DLL Name:/ {print $3}')
+          done < <(find . -type f \( -name '*.exe' -o -name '*.dll' \) -print0)
+        done
+
+    - name: Install Inno Setup
+      if: ${{ inputs.package }}
+      shell: pwsh
+      run: |
+        choco install innosetup --no-progress -y
+
+    - name: Build installer
+      if: ${{ inputs.package }}
+      shell: pwsh
+      run: |
+        $version = "${{ steps.extract.outputs.version }}"
+        $sourceRoot = "${{ github.workspace }}"
+        $buildOutput = Join-Path $sourceRoot "${{ inputs.build-dir }}\Output"
+        $packageOutput = Join-Path $sourceRoot "${{ inputs.build-dir }}\Package"
+        $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+
+        if (-not (Test-Path $iscc)) {
+          throw "ISCC.exe not found at $iscc"
+        }
+        New-Item -ItemType Directory -Path $packageOutput -Force | Out-Null
+
+        & $iscc `
+          "/DMyAppVersion=$version" `
+          "/DBuildOutputDir=$buildOutput" `
+          "/DPackageOutputDir=$packageOutput" `
+          "/DSourceRootDir=$sourceRoot" `
+          "assets\package\windows\package.iss"
+
+    - name: Create zip package
+      if: ${{ inputs.package }}
+      shell: pwsh
+      run: |
+        $version = "${{ steps.extract.outputs.version }}"
+        $zipPath = "${{ inputs.build-dir }}/Output/qteasytier_v${version}_windows_amd64.zip"
+        if (Test-Path $zipPath) {
+          Remove-Item $zipPath -Force
+        }
+        Compress-Archive -Path "${{ inputs.build-dir }}/Output/*" -DestinationPath $zipPath -Force
+
+    - name: Compute upload path
+      id: upload-path
+      shell: bash
+      run: |
+        if [ "${{ inputs.package }}" == "true" ]; then
+          echo "path=${{ github.workspace }}/${{ inputs.build-dir }}/Output/qteasytier_v${{ steps.extract.outputs.version }}_windows_amd64.zip" >> "$GITHUB_OUTPUT"
+        else
+          echo "path=${{ github.workspace }}/${{ inputs.build-dir }}/Output" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Upload artifacts
+      if: ${{ inputs.artifact-prefix != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-prefix }}-windows-amd64
+        path: ${{ steps.upload-path.outputs.path }}
+        if-no-files-found: error
+
+    - name: Upload installer artifact
+      if: ${{ inputs.artifact-prefix != '' && inputs.package }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-prefix }}-windows-amd64-installer
+        path: ${{ github.workspace }}/${{ inputs.build-dir }}/Package/qteasytier_v${{ steps.extract.outputs.version }}_windows_amd64.exe
+        if-no-files-found: error

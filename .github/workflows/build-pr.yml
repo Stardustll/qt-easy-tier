@@ -8,19 +8,47 @@ permissions:
 
 jobs:
   linux-deb:
-    name: Linux build
-    uses: ./.github/workflows/linux.yml
-    with:
-      artifact-prefix: qteasytier-pr-${{ github.event.pull_request.number }}
+    name: Linux build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            qt_arch: linux_gcc_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qt_arch: linux_gcc_arm64
+
+    steps:
+      - name: Linux build
+        uses: ./.github/actions/build/linux
+        with:
+          qt-arch: ${{ matrix.qt_arch }}
+          arch: ${{ matrix.arch }}
+          artifact-prefix: qteasytier-pr-${{ github.event.pull_request.number }}
 
   windows-zip:
     name: Windows build amd64
-    uses: ./.github/workflows/windows.yml
-    with:
-      artifact-prefix: qteasytier-pr-${{ github.event.pull_request.number }}
+    runs-on: windows-2022
+
+    steps:
+      - name: Windows build
+        uses: ./.github/actions/build/windows
+        with:
+          artifact-prefix: qteasytier-pr-${{ github.event.pull_request.number }}
 
   deepin-dtk:
     name: Deepin v25 DTK build
-    uses: ./.github/workflows/deepin.yml
-    with:
-      artifact-name: qteasytier-pr-${{ github.event.pull_request.number }}-deepin
+    runs-on: ubuntu-latest
+    container:
+      image: linuxdeepin/deepin:25
+      options: --privileged
+
+    steps:
+      - name: Deepin DTK build
+        uses: ./.github/actions/build/deepin
+        with:
+          artifact-name: qteasytier-pr-${{ github.event.pull_request.number }}-deepin

@@ -7,27 +7,55 @@ on:
 
 jobs:
   linux-deb:
-    name: Linux build
+    name: Linux build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     # 提交信息以 docs 开头时跳过构建（仅文档变更，无需产物）
     if: ${{ !startsWith(github.event.head_commit.message, 'docs') }}
-    uses: ./.github/workflows/linux.yml
-    with:
-      package-deb: true
-      artifact-prefix: qteasytier-master
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            qt_arch: linux_gcc_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qt_arch: linux_gcc_arm64
+
+    steps:
+      - name: Linux build
+        uses: ./.github/actions/build/linux
+        with:
+          qt-arch: ${{ matrix.qt_arch }}
+          arch: ${{ matrix.arch }}
+          package-deb: true
+          artifact-prefix: qteasytier-master
 
   windows-zip:
     name: Windows build amd64
+    runs-on: windows-2022
     # 提交信息以 docs 开头时跳过构建（仅文档变更，无需产物）
     if: ${{ !startsWith(github.event.head_commit.message, 'docs') }}
-    uses: ./.github/workflows/windows.yml
-    with:
-      package: true
-      artifact-prefix: qteasytier-master
+
+    steps:
+      - name: Windows build
+        uses: ./.github/actions/build/windows
+        with:
+          package: true
+          artifact-prefix: qteasytier-master
 
   deepin-dtk:
     name: Deepin v25 DTK build
+    runs-on: ubuntu-latest
+    container:
+      image: linuxdeepin/deepin:25
+      options: --privileged
     # 提交信息以 docs 开头时跳过构建（仅文档变更，无需产物）
     if: ${{ !startsWith(github.event.head_commit.message, 'docs') }}
-    uses: ./.github/workflows/deepin.yml
-    with:
-      artifact-name: qteasytier-master-deepin
+
+    steps:
+      - name: Deepin DTK build
+        uses: ./.github/actions/build/deepin
+        with:
+          artifact-name: qteasytier-master-deepin

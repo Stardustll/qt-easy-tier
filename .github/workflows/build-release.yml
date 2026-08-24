@@ -55,29 +55,57 @@ jobs:
           echo "release_title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
 
   linux-deb:
-    name: Linux build
+    name: Linux build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     needs:
       - release-info
-    uses: ./.github/workflows/linux.yml
-    with:
-      version: ${{ needs.release-info.outputs.version }}
-      package-deb: true
-      artifact-prefix: qteasytier-v${{ needs.release-info.outputs.version }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            qt_arch: linux_gcc_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qt_arch: linux_gcc_arm64
+
+    steps:
+      - name: Linux build
+        uses: ./.github/actions/build/linux
+        with:
+          qt-arch: ${{ matrix.qt_arch }}
+          arch: ${{ matrix.arch }}
+          version: ${{ needs.release-info.outputs.version }}
+          package-deb: true
+          artifact-prefix: qteasytier-v${{ needs.release-info.outputs.version }}
 
   windows-zip:
     name: Windows build amd64
+    runs-on: windows-2022
     needs:
       - release-info
-    uses: ./.github/workflows/windows.yml
-    with:
-      version: ${{ needs.release-info.outputs.version }}
-      package: true
-      artifact-prefix: qteasytier-v${{ needs.release-info.outputs.version }}
+
+    steps:
+      - name: Windows build
+        uses: ./.github/actions/build/windows
+        with:
+          version: ${{ needs.release-info.outputs.version }}
+          package: true
+          artifact-prefix: qteasytier-v${{ needs.release-info.outputs.version }}
 
   deepin-dtk:
     name: Deepin v25 DTK build
-    # 仅做构建与冒烟验证；不传 artifact-name，避免混入发布资产
-    uses: ./.github/workflows/deepin.yml
+    runs-on: ubuntu-latest
+    container:
+      image: linuxdeepin/deepin:25
+      options: --privileged
+
+    steps:
+      - name: Deepin DTK build
+        # 不传 artifact-name，仅做构建与冒烟验证，避免混入发布资产
+        uses: ./.github/actions/build/deepin
 
   publish-release:
     name: Publish GitHub Release
