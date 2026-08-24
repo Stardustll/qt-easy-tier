@@ -72,6 +72,9 @@ jobs:
             qt_arch: linux_gcc_arm64
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Linux build
         uses: ./.github/actions/build/linux
         with:
@@ -88,6 +91,9 @@ jobs:
       - release-info
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Windows build
         uses: ./.github/actions/build/windows
         with:
@@ -103,6 +109,9 @@ jobs:
       options: --privileged
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Deepin DTK build
         # 不传 artifact-name，仅做构建与冒烟验证，避免混入发布资产
         uses: ./.github/actions/build/deepin

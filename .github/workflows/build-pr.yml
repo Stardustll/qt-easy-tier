@@ -23,6 +23,9 @@ jobs:
             qt_arch: linux_gcc_arm64
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Linux build
         uses: ./.github/actions/build/linux
         with:
@@ -35,6 +38,9 @@ jobs:
     runs-on: windows-2022
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Windows build
         uses: ./.github/actions/build/windows
         with:
@@ -48,6 +54,9 @@ jobs:
       options: --privileged
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Deepin DTK build
         uses: ./.github/actions/build/deepin
         with:
