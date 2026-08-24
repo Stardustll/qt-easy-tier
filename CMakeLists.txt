@@ -29,6 +29,21 @@ set_property(CACHE CLONE_DAEMON_FROM PROPERTY STRINGS GITEE GITHUB CNB)
 
 include(cmake/QtEasyTierDaemon.cmake)
 
+# deepin DTK 适配（可选）：QTET_ENABLE_DTK 显式开启，或 Linux 下自动探测 Dtk6Declarative。
+# 开启后：Chameleon 风格 + org.deepin.dtk 主窗口；未开启时与旧构建完全一致。
+option(QTET_ENABLE_DTK "Build with deepin DTK support (Chameleon style + DTK main window)" OFF)
+if(QTET_ENABLE_DTK)
+    find_package(Dtk6Core REQUIRED)
+    find_package(Dtk6Gui REQUIRED)
+    find_package(Dtk6Declarative REQUIRED)
+elseif(NOT WIN32)
+    find_package(Dtk6Declarative QUIET)
+    if(Dtk6Declarative_FOUND)
+        message(STATUS "Dtk6Declarative found, enabling DTK adaptation (override with -DQTET_ENABLE_DTK=OFF)")
+        set(QTET_ENABLE_DTK ON)
+    endif()
+endif()
+
 find_package(Qt6 6.8 REQUIRED COMPONENTS
     Core
     Sql
@@ -114,8 +129,13 @@ target_link_libraries(appQtEasyTier PRIVATE
     qtet_appsupport
 )
 
+if(QTET_ENABLE_DTK)
+    target_link_libraries(appQtEasyTier PRIVATE Dtk6::Core Dtk6::Gui Dtk6::Declarative)
+    target_compile_definitions(appQtEasyTier PRIVATE QTET_ENABLE_DTK=1)
+    target_compile_definitions(qtet_appsupport PRIVATE QTET_ENABLE_DTK=1)
+endif()
+
 set(QTET_QML_FILES
-    src/qml/Main.qml
     src/qml/components/Sidebar.qml
     src/qml/components/SidebarItem.qml
     src/qml/components/PageContainer.qml
@@ -137,8 +157,18 @@ set(QTET_QML_FILES
     src/qml/pages/LogPage.qml
 )
 
+if(QTET_ENABLE_DTK)
+    # DTK 构建使用 org.deepin.dtk 主窗口，资源别名仍为 Main.qml（main.cpp 加载路径不变）
+    list(APPEND QTET_QML_FILES src/qml/MainDeepin.qml)
+else()
+    list(APPEND QTET_QML_FILES src/qml/Main.qml)
+endif()
+
 foreach(qml_file IN LISTS QTET_QML_FILES)
     file(RELATIVE_PATH qml_resource_alias "${CMAKE_CURRENT_SOURCE_DIR}/src/qml" "${CMAKE_CURRENT_SOURCE_DIR}/${qml_file}")
+    if(qml_resource_alias STREQUAL "MainDeepin.qml")
+        set(qml_resource_alias "Main.qml")
+    endif()
     set_source_files_properties(${qml_file} PROPERTIES QT_RESOURCE_ALIAS "${qml_resource_alias}")
 endforeach()
 
