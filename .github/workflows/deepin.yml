@@ -1,7 +1,8 @@
 name: deepin
 
 on:
-  # 可复用 workflow：由 build-master / build-pr / build-release 三个流水线调用
+  # 可复用 workflow：由 build-master / build-pr / build-release 三个流水线调用。
+  # 仅声明 workflow_call 的 workflow 不会出现在 Actions 页面左侧列表。
   workflow_call:
     inputs:
       artifact-name:
@@ -9,14 +10,6 @@ on:
         required: false
         type: string
         default: ''
-  # 手动触发：不经过三个流水线时单独验证 deepin 构建
-  workflow_dispatch:
-    inputs:
-      artifact-name:
-        description: 上传产物名称；留空则不上传
-        required: false
-        type: string
-        default: 'appQtEasyTier-deepin'
 
 jobs:
   deepin-dtk-build:
