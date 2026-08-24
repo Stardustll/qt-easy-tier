@@ -137,6 +137,8 @@ if(QTET_ENABLE_DTK)
     target_link_libraries(appQtEasyTier PRIVATE Dtk6::Core Dtk6::Gui Dtk6::Declarative)
     target_compile_definitions(appQtEasyTier PRIVATE QTET_ENABLE_DTK=1)
     target_compile_definitions(qtet_appsupport PRIVATE QTET_ENABLE_DTK=1)
+    # DtkIntegration.cpp 编译需要 dtkgui 头文件 include 路径
+    target_link_libraries(qtet_appsupport PRIVATE Dtk6::Gui)
 endif()
 
 set(QTET_QML_FILES

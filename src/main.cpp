@@ -20,6 +20,7 @@
 
 #include "app/AppLaunchManager.h"
 #include "app/AppServices.h"
+#include "app/DtkIntegration.h"
 #include "app/QmlSingletonRegistrar.h"
 #include "core/repository/DatabaseConnection.h"
 #include "core/system_tray/SystemTrayManager.h"
@@ -33,7 +34,14 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("FluentWinUI3"));
 #endif
 
+#ifdef QTET_ENABLE_DTK
+    DtkIntegration::initEarly();
+#endif
+
     QApplication app(argc, argv);
+#ifdef QTET_ENABLE_DTK
+    DtkIntegration::initAfterApp();
+#endif
     app.setOrganizationName(QStringLiteral("qteasytier"));
     app.setApplicationName(QStringLiteral("QtEasyTier"));
     app.setWindowIcon(QIcon(":/icons/qtet.png"));
