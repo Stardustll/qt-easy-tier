@@ -141,6 +141,8 @@ if(QTET_ENABLE_DTK)
     target_compile_definitions(qtet_appsupport PRIVATE QTET_ENABLE_DTK=1)
     # DtkIntegration.cpp 编译需要 dtkgui 头文件 include 路径
     target_link_libraries(qtet_appsupport PRIVATE Dtk6::Gui)
+    # DtkIntegration.cpp 的 <QQuickStyle> 头文件属于 QtQuickControls2 模块
+    target_link_libraries(qtet_appsupport PRIVATE Qt6::QuickControls2)
 endif()
 
 set(QTET_QML_FILES
