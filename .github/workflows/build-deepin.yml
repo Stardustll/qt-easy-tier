@@ -1,0 +1,84 @@
+name: build-deepin
+
+on:
+  push:
+    branches: [master, dev]
+  pull_request:
+    branches: [master, dev]
+
+jobs:
+  deepin-dtk-build:
+    name: Deepin v25 DTK build
+    runs-on: ubuntu-latest
+    container:
+      image: linuxdeepin/deepin:25
+      options: --privileged
+    env:
+      BUILD_DIR: build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build git pkg-config dpkg-dev \
+            qt6-base-dev qt6-declarative-dev qt6-tools-dev qt6-tools-dev-tools \
+            libdtk6core-dev libdtk6gui-dev libdtk6declarative-dev \
+            libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libfontconfig1-dev libdbus-1-dev libfreetype6-dev \
+            libx11-dev libxcb1-dev libxext-dev libxfixes-dev libxi-dev \
+            libxrender-dev libxcb-glx0-dev libxcb-keysyms1-dev \
+            libxcb-image0-dev libxcb-shm0-dev libxcb-icccm4-dev \
+            libxcb-sync-dev libxcb-xfixes0-dev libxcb-shape0-dev \
+            libxcb-randr0-dev libxcb-render-util0-dev libxcb-util-dev \
+            libxcb-cursor-dev libxcb-xinerama0-dev libxcb-xkb-dev \
+            libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev
+
+      - name: Show environment versions
+        run: |
+          qmake6 -query QT_VERSION
+          apt-cache policy libdtk6declarative-dev | head -5
+
+      - name: Configure with DTK enabled
+        run: |
+          cmake -S . -B "$BUILD_DIR" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_WITH_DAEMON=OFF \
+            -DQTET_ENABLE_DTK=ON
+
+      - name: Build
+        run: cmake --build "$BUILD_DIR" -j
+
+      - name: Run C++ tests
+        run: |
+          QT_QPA_PLATFORM=offscreen ctest --test-dir "$BUILD_DIR" --output-on-failure
+
+      - name: QML smoke test (offscreen, import org.deepin.dtk + Chameleon)
+        run: |
+          set +e
+          QT_QPA_PLATFORM=offscreen timeout 10 "$BUILD_DIR/Output/appQtEasyTier" --autostart > /tmp/qtet-smoke.log 2>&1
+          code=$?
+          set -e
+          # 期望：timeout 杀进程退出码 124，且日志无 QML 模块加载失败
+          if [ "$code" -ne 124 ]; then
+            echo "app exited unexpectedly with code $code"
+            cat /tmp/qtet-smoke.log
+            exit 1
+          fi
+          if grep -iE "module .* not (found|installed)|TypeError|is not a (type|function)" /tmp/qtet-smoke.log; then
+            echo "QML module/type resolution failure detected"
+            cat /tmp/qtet-smoke.log
+            exit 1
+          fi
+          echo "smoke test passed (ran 10s without QML import errors)"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: appQtEasyTier-deepin
+          path: |
+            ${{ env.BUILD_DIR }}/Output/appQtEasyTier
