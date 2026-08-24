@@ -118,6 +118,21 @@ cmake --build build -j
 
 设置 `-DCLONE_DAEMON_FROM=GITEE` 后，CMake 会从 Gitee 克隆后端源码；设为 `CNB` 则从 cnb.cool 克隆。
 
+### deepin v25 DTK 适配
+
+在 deepin v25（DTK6）上构建原生 DTK 外观版本：
+
+```bash
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DQTET_ENABLE_DTK=ON
+cmake --build build -j
+```
+
+开启后 Qt Quick Controls 使用 Chameleon 风格、主窗口为 org.deepin.dtk 的
+ApplicationWindow + TitleBar（含主题切换菜单），自动跟随系统亮暗主题。
+未开启时（默认）行为与旧版完全一致；Linux 下若检测到 Dtk6Declarative 会自动开启，
+可用 `-DQTET_ENABLE_DTK=OFF` 强制关闭。deepin 安装包通过
+`assets/package/deepin/build_deepin_deb.sh -v <版本>` 生成。
+
 ## 测试
 
 运行全部测试：

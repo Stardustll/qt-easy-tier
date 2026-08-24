@@ -22,6 +22,7 @@ ctest --test-dir build --output-on-failure
 - Use `QT_QPA_PLATFORM=offscreen` for headless CTest runs; GitHub Actions sets it only on the test step.
 - CI workflows under `.github/workflows/` use Qt 6.8.3 + Ninja, default `BUILD_WITH_DAEMON=ON`, and upload/package `build/Output`. `build-release.yml` runs from branches named `vX.Y.Z` and requires that version to match root `project(... VERSION ...)`.
 - No formatter, linter, pre-commit, task runner, lockfile, or repo-local OpenCode config is present; use CMake build plus CTest as the source of truth.
+- deepin v25 DTK 适配：`-DQTET_ENABLE_DTK=ON` 启用（Linux 检测到 Dtk6Declarative 自动开启）；DTK 构建使用 `src/qml/MainDeepin.qml`（资源别名 Main.qml）与 `src/app/DtkIntegration.cpp`（Chameleon + DGuiApplicationHelper）；DTK 代码无本机编译环境，验证依赖 `.github/workflows/build-deepin.yml` deepin 容器 CI。
 
 ## CMake And Files
 
