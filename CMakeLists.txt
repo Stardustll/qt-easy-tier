@@ -31,17 +31,21 @@ include(cmake/QtEasyTierDaemon.cmake)
 
 # deepin DTK 适配（可选）：QTET_ENABLE_DTK 显式开启，或 Linux 下自动探测 Dtk6Declarative。
 # 开启后：Chameleon 风格 + org.deepin.dtk 主窗口；未开启时与旧构建完全一致。
+# 探测仅在用户未显式设置该选项时执行，并用 cache 变量落盘，避免遮蔽显式 -DQTET_ENABLE_DTK=OFF。
+if(NOT DEFINED QTET_ENABLE_DTK AND NOT WIN32)
+    find_package(Dtk6Core QUIET)
+    find_package(Dtk6Gui QUIET)
+    find_package(Dtk6Declarative QUIET)
+    if(Dtk6Declarative_FOUND AND Dtk6Core_FOUND AND Dtk6Gui_FOUND)
+        message(STATUS "Dtk6Declarative found, enabling DTK adaptation (override with -DQTET_ENABLE_DTK=OFF)")
+        set(QTET_ENABLE_DTK ON CACHE BOOL "Build with deepin DTK support (Chameleon style + DTK main window)" FORCE)
+    endif()
+endif()
 option(QTET_ENABLE_DTK "Build with deepin DTK support (Chameleon style + DTK main window)" OFF)
 if(QTET_ENABLE_DTK)
     find_package(Dtk6Core REQUIRED)
     find_package(Dtk6Gui REQUIRED)
     find_package(Dtk6Declarative REQUIRED)
-elseif(NOT WIN32)
-    find_package(Dtk6Declarative QUIET)
-    if(Dtk6Declarative_FOUND)
-        message(STATUS "Dtk6Declarative found, enabling DTK adaptation (override with -DQTET_ENABLE_DTK=OFF)")
-        set(QTET_ENABLE_DTK ON)
-    endif()
 endif()
 
 find_package(Qt6 6.8 REQUIRED COMPONENTS
