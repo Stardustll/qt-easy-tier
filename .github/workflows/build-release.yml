@@ -9,10 +9,6 @@ permissions:
   contents: write
   issues: write
 
-env:
-  BUILD_DIR: build
-  QT_VERSION: 6.8.3
-
 jobs:
   release-info:
     name: Resolve release info
@@ -59,220 +55,29 @@ jobs:
           echo "release_title=$RELEASE_TITLE" >> "$GITHUB_OUTPUT"
 
   linux-deb:
-    name: Linux build ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    name: Linux build
     needs:
       - release-info
-
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-24.04
-            qt_arch: linux_gcc_64
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-            qt_arch: linux_gcc_arm64
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential cmake ninja-build git bash dpkg-dev \
-            libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
-            libfontconfig1-dev libdbus-1-dev libfreetype6-dev \
-            libx11-dev libxcb1-dev libxext-dev libxfixes-dev libxi-dev \
-            libxrender-dev libxcb-glx0-dev libxcb-keysyms1-dev \
-            libxcb-image0-dev libxcb-shm0-dev libxcb-icccm4-dev \
-            libxcb-sync-dev libxcb-xfixes0-dev libxcb-shape0-dev \
-            libxcb-randr0-dev libxcb-render-util0-dev libxcb-util-dev \
-            libxcb-cursor-dev libxcb-xinerama0-dev libxcb-xkb-dev \
-            libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev \
-            libglu1-mesa-dev libpng-dev
-
-      - name: Install Qt
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ env.QT_VERSION }}
-          target: desktop
-          arch: ${{ matrix.qt_arch }}
-
-      - name: Show Qt version
-        run: |
-          qmake -query QT_VERSION
-          qmake -query QT_INSTALL_PREFIX
-
-      - name: Configure
-        run: |
-          cmake -S . -B "$BUILD_DIR" \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_PREFIX_PATH="$Qt6_DIR"
-
-      - name: Build
-        run: |
-          cmake --build "$BUILD_DIR" --parallel "$(nproc)"
-
-      - name: Run tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          ctest --test-dir "$BUILD_DIR" --output-on-failure
-
-      - name: Build deb package
-        working-directory: ${{ github.workspace }}/build/Output
-        run: |
-          bash "${{ github.workspace }}/assets/package/linux/build_deb.sh" \
-            -v "${{ needs.release-info.outputs.version }}" \
-            -a "${{ matrix.arch }}"
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: qteasytier-v${{ needs.release-info.outputs.version }}-linux-${{ matrix.arch }}
-          path: |
-            build/Output/qteasytier_v${{ needs.release-info.outputs.version }}_linux_${{ matrix.arch }}.deb
-          if-no-files-found: error
+    uses: ./.github/workflows/linux.yml
+    with:
+      version: ${{ needs.release-info.outputs.version }}
+      package-deb: true
+      artifact-prefix: qteasytier-v${{ needs.release-info.outputs.version }}
 
   windows-zip:
     name: Windows build amd64
-    runs-on: windows-2022
     needs:
       - release-info
+    uses: ./.github/workflows/windows.yml
+    with:
+      version: ${{ needs.release-info.outputs.version }}
+      package: true
+      artifact-prefix: qteasytier-v${{ needs.release-info.outputs.version }}
 
-    env:
-      BUILD_DIR: build
-      MSYSTEM: UCRT64
-      CHERE_INVOKING: 1
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            git
-            mingw-w64-ucrt-x86_64-gcc
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-qt6-base
-            mingw-w64-ucrt-x86_64-qt6-declarative
-            mingw-w64-ucrt-x86_64-qt6-svg
-            mingw-w64-ucrt-x86_64-qt6-tools
-
-      - name: Show Qt version
-        shell: msys2 {0}
-        run: |
-          qmake6 -query QT_VERSION
-          qmake6 -query QT_INSTALL_PREFIX
-          which windeployqt
-          test -f /ucrt64/share/qt6/bin/qmlimportscanner.exe
-
-      - name: Configure
-        shell: msys2 {0}
-        run: |
-          cmake -S . -B "$BUILD_DIR" \
-            -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        shell: msys2 {0}
-        run: |
-          cmake --build "$BUILD_DIR" --parallel "$(nproc)"
-
-      - name: Run tests
-        shell: msys2 {0}
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: |
-          ctest --test-dir "$BUILD_DIR" --output-on-failure
-
-      - name: Prepare runtime files
-        shell: msys2 {0}
-        run: |
-          find "$BUILD_DIR/Output" -maxdepth 1 -type f \( -name '*.a' -o -name '*.lib' -o -name 'tst*' \) -delete
-          export PATH="/ucrt64/share/qt6/bin:$PATH"
-          cd "$BUILD_DIR/Output"
-          windeployqt.exe --release --force \
-            --qmldir ../../src/qml \
-            --qml-deploy-dir ./share/qt6/qml \
-            ./appQtEasyTier.exe
-
-          iter=0
-          changed=1
-          while [ "$changed" -eq 1 ] && [ "$iter" -lt 10 ]; do
-            changed=0
-            iter=$((iter + 1))
-            while IFS= read -r -d '' file; do
-              while IFS= read -r dll; do
-                if [ -f "/ucrt64/bin/$dll" ] && [ ! -f "./$dll" ]; then
-                  cp "/ucrt64/bin/$dll" .
-                  changed=1
-                fi
-              done < <(objdump -p "$file" 2>/dev/null | awk '/DLL Name:/ {print $3}')
-            done < <(find . -type f \( -name '*.exe' -o -name '*.dll' \) -print0)
-          done
-
-      - name: Install Inno Setup
-        shell: pwsh
-        run: |
-          choco install innosetup --no-progress -y
-
-      - name: Build installer
-        shell: pwsh
-        run: |
-          $version = "${{ needs.release-info.outputs.version }}"
-          $sourceRoot = "${{ github.workspace }}"
-          $buildOutput = Join-Path $sourceRoot "build\Output"
-          $packageOutput = Join-Path $sourceRoot "build\Package"
-          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
-
-          if (-not (Test-Path $iscc)) {
-            throw "ISCC.exe not found at $iscc"
-          }
-          New-Item -ItemType Directory -Path $packageOutput -Force | Out-Null
-
-          & $iscc `
-            "/DMyAppVersion=$version" `
-            "/DBuildOutputDir=$buildOutput" `
-            "/DPackageOutputDir=$packageOutput" `
-            "/DSourceRootDir=$sourceRoot" `
-            "assets\package\windows\package.iss"
-
-      - name: Create zip package
-        shell: pwsh
-        run: |
-          $version = "${{ needs.release-info.outputs.version }}"
-          $zipPath = "build/Output/qteasytier_v${version}_windows_amd64.zip"
-          if (Test-Path $zipPath) {
-            Remove-Item $zipPath -Force
-          }
-          Compress-Archive -Path "build/Output/*" -DestinationPath $zipPath -Force
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: qteasytier-v${{ needs.release-info.outputs.version }}-windows-amd64
-          path: |
-            build/Output/qteasytier_v${{ needs.release-info.outputs.version }}_windows_amd64.zip
-          if-no-files-found: error
-
-      - name: Upload installer artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qteasytier-v${{ needs.release-info.outputs.version }}-windows-amd64-installer
-          path: |
-            build/Package/qteasytier_v${{ needs.release-info.outputs.version }}_windows_amd64.exe
-          if-no-files-found: error
+  deepin-dtk:
+    name: Deepin v25 DTK build
+    # 仅做构建与冒烟验证；不传 artifact-name，避免混入发布资产
+    uses: ./.github/workflows/deepin.yml
 
   publish-release:
     name: Publish GitHub Release

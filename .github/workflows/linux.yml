@@ -1,0 +1,130 @@
+name: linux
+
+on:
+  # 可复用 workflow：由 build-master / build-pr / build-release 三个流水线调用
+  workflow_call:
+    inputs:
+      qt-version:
+        description: Qt 版本
+        required: false
+        type: string
+        default: 6.8.3
+      version:
+        description: 打包 deb 使用的版本号；为空则自动从 CMakeLists.txt 提取
+        required: false
+        type: string
+        default: ''
+      package-deb:
+        description: 是否打包 deb（各架构矩阵 job 分别打包自身架构）
+        required: false
+        type: boolean
+        default: false
+      artifact-prefix:
+        description: 上传产物名前缀；留空则不上传
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  linux-build:
+    name: Linux build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            qt_arch: linux_gcc_64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            qt_arch: linux_gcc_arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build git bash dpkg-dev \
+            libgl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-dev \
+            libfontconfig1-dev libdbus-1-dev libfreetype6-dev \
+            libx11-dev libxcb1-dev libxext-dev libxfixes-dev libxi-dev \
+            libxrender-dev libxcb-glx0-dev libxcb-keysyms1-dev \
+            libxcb-image0-dev libxcb-shm0-dev libxcb-icccm4-dev \
+            libxcb-sync-dev libxcb-xfixes0-dev libxcb-shape0-dev \
+            libxcb-randr0-dev libxcb-render-util0-dev libxcb-util-dev \
+            libxcb-cursor-dev libxcb-xinerama0-dev libxcb-xkb-dev \
+            libxcb-xinput-dev libegl1-mesa-dev libgles2-mesa-dev \
+            libglu1-mesa-dev libpng-dev
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ inputs.qt-version }}
+          target: desktop
+          arch: ${{ matrix.qt_arch }}
+
+      - name: Show Qt version
+        run: |
+          qmake -query QT_VERSION
+          qmake -query QT_INSTALL_PREFIX
+
+      - name: Extract project version
+        id: extract
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            VERSION="$(grep -E '^project\(QtEasyTier VERSION ' CMakeLists.txt | sed -E 's/.*VERSION ([0-9]+\.[0-9]+\.[0-9]+).*/\1/')"
+            if [ -z "$VERSION" ]; then
+              echo "Failed to extract version from CMakeLists.txt" >&2
+              exit 1
+            fi
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR"
+
+      - name: Build
+        run: |
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Run tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ctest --test-dir build --output-on-failure
+
+      - name: Build deb package
+        if: ${{ inputs.package-deb }}
+        working-directory: ${{ github.workspace }}/build/Output
+        run: |
+          bash "${{ github.workspace }}/assets/package/linux/build_deb.sh" \
+            -v "${{ steps.extract.outputs.version }}" \
+            -a "${{ matrix.arch }}"
+
+      - name: Compute artifact path
+        id: artifact-path
+        run: |
+          if [ "${{ inputs.package-deb }}" == "true" ]; then
+            echo "path=${{ github.workspace }}/build/Output/qteasytier_v${{ steps.extract.outputs.version }}_linux_${{ matrix.arch }}.deb" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=${{ github.workspace }}/build/Output" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload artifacts
+        if: ${{ inputs.artifact-prefix != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact-prefix }}-linux-${{ matrix.arch }}
+          path: ${{ steps.artifact-path.outputs.path }}
+          if-no-files-found: error

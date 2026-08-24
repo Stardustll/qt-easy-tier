@@ -20,9 +20,9 @@ ctest --test-dir build --output-on-failure
 - Windows is documented for MinGW64/UCRT, not MSVC. qtet-daemon self-registers the Windows service via `qtet-daemon.exe --install/--start/--stop/--uninstall` (each needs admin; the app elevates via `runElevated`); there is no WinSW download or `DaemonInstaller.exe` anymore. The Windows service name is `qtet-daemon.sock`.
 - Focused test loop: `cmake --build build --target tst_network_conf` then `ctest --test-dir build -R tst_network_conf --output-on-failure`; test executables also live in `build/Output/`.
 - Use `QT_QPA_PLATFORM=offscreen` for headless CTest runs; GitHub Actions sets it only on the test step.
-- CI workflows under `.github/workflows/` use Qt 6.8.3 + Ninja, default `BUILD_WITH_DAEMON=ON`, and upload/package `build/Output`. `build-release.yml` runs from branches named `vX.Y.Z` and requires that version to match root `project(... VERSION ...)`.
+- CI workflows under `.github/workflows/` use Qt 6.8.3 + Ninja, default `BUILD_WITH_DAEMON=ON`, and upload/package `build/Output`. `build-release.yml` runs from branches named `vX.Y.Z` and requires that version to match root `project(... VERSION ...)`. The three build pipelines (`build-master.yml` / `build-pr.yml` / `build-release.yml`) are thin shells calling reusable workflows `linux.yml` / `windows.yml` / `deepin.yml` via `workflow_call`; change platform build logic in those three, not in the pipelines.
 - No formatter, linter, pre-commit, task runner, lockfile, or repo-local OpenCode config is present; use CMake build plus CTest as the source of truth.
-- deepin v25 DTK 适配：`-DQTET_ENABLE_DTK=ON` 启用（Linux 检测到 Dtk6Declarative 自动开启）；DTK 构建使用 `src/qml/MainDeepin.qml`（资源别名 Main.qml）与 `src/app/DtkIntegration.cpp`（Chameleon + DGuiApplicationHelper）；DTK 代码无本机编译环境，验证依赖 `.github/workflows/build-deepin.yml` deepin 容器 CI。
+- deepin v25 DTK 适配：`-DQTET_ENABLE_DTK=ON` 启用（Linux 检测到 Dtk6Declarative 自动开启）；DTK 构建使用 `src/qml/MainDeepin.qml`（资源别名 Main.qml）与 `src/app/DtkIntegration.cpp`（Chameleon + DGuiApplicationHelper）；DTK 代码无本机编译环境，验证依赖 `.github/workflows/deepin.yml` deepin 容器 CI（`linuxdeepin/deepin:25`）。
 
 ## CMake And Files
 
