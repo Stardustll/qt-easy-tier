@@ -37,11 +37,11 @@ runs:
       shell: bash
       run: |
         # deepin 镜像预装的 Qt 6.8 配置文件齐全但部分运行时库被裁剪/版本错位，
-        # 强制重装关键 Qt 运行时与 QML 模块包以恢复缺失的 .so（如 libQt6QuickDialogs2Utils.so.6.8.0）
+        # 强制重装关键 Qt 运行时与 QML 模块包以恢复缺失的 .so（如 libQt6QuickDialogs2Utils.so.6.8.0）。
+        # 注意：deepin 源中 libqt6quickdialogs2* 已合并进 qml6-module-qtquick-dialogs，勿单独安装。
         apt-get install -y --no-install-recommends --reinstall \
           libqt6core6 libqt6gui6 libqt6sql6 libqt6network6 libqt6widgets6 \
           libqt6qml6 libqt6quick6 libqt6quickcontrols2-6 libqt6quicktemplates2-6 \
-          libqt6quickdialogs2-6 libqt6quickdialogs2quickimpl6 libqt6quickdialogs2utils6 \
           libqt6svg6 \
           qml6-module-qtquick qml6-module-qtquick-dialogs qml6-module-qtquick-controls \
           qml6-module-qtquick-templates
