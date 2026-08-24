@@ -54,8 +54,9 @@ runs:
       shell: bash
       run: |
         qmake6 -query QT_VERSION
-        apt-cache policy libdtk6declarative-dev | head -5
-        ls /usr/lib/x86_64-linux-gnu/libQt6QuickDialogs2* 2>/dev/null | head -5 || echo "QuickDialogs2 libs still missing"
+        # 注意：GitHub 默认 bash 开启 pipefail，不要对 apt-cache/ls 输出做 head 截断（SIGPIPE 会致步骤退出 141）
+        apt-cache policy libdtk6declarative-dev
+        ls /usr/lib/x86_64-linux-gnu/libQt6QuickDialogs2* 2>/dev/null || echo "QuickDialogs2 libs still missing"
 
     - name: Configure with DTK enabled
       shell: bash
