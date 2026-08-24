@@ -30,7 +30,7 @@ ApplicationWindow {
     App.Theme { id: theme }
 
     // DTK 标题栏：自带窗口控制按钮与选项菜单（含 ThemeMenu 主题切换）
-    header: TitleBar {
+    TitleBar {
         title: qsTr("QtEasyTier")
     }
 

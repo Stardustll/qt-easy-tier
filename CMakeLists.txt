@@ -25,11 +25,13 @@ set(CMAKE_AUTORCC ON)
 option(BUILD_WITH_DAEMON "Build and collect qtet-daemon runtime" ON)
 # qtet-daemon 克隆来源：GITEE / GITHUB / CNB，默认 GITHUB
 set(CLONE_DAEMON_FROM "GITHUB" CACHE STRING "Clone qtet-daemon from GITEE, GITHUB or CNB")
+# deepin DTK 构建选项，默认关闭
+option(QTET_ENABLE_DTK "Build with deepin DTK support (Chameleon style + DTK main window)" OFF)
 set_property(CACHE CLONE_DAEMON_FROM PROPERTY STRINGS GITEE GITHUB CNB)
 
 include(cmake/QtEasyTierDaemon.cmake)
 
-# deepin DTK 适配（可选）：QTET_ENABLE_DTK 显式开启，或 Linux 下自动探测 Dtk6Declarative。
+# deepin DTK 适配（可选）：QTET_ENABLE_DTK 显式开启，或 Linux 下自动探测 Dtk6Core/Gui/Declarative。
 # 开启后：Chameleon 风格 + org.deepin.dtk 主窗口；未开启时与旧构建完全一致。
 # 探测仅在用户未显式设置该选项时执行，并用 cache 变量落盘，避免遮蔽显式 -DQTET_ENABLE_DTK=OFF。
 if(NOT DEFINED QTET_ENABLE_DTK AND NOT WIN32)
@@ -41,7 +43,7 @@ if(NOT DEFINED QTET_ENABLE_DTK AND NOT WIN32)
         set(QTET_ENABLE_DTK ON CACHE BOOL "Build with deepin DTK support (Chameleon style + DTK main window)" FORCE)
     endif()
 endif()
-option(QTET_ENABLE_DTK "Build with deepin DTK support (Chameleon style + DTK main window)" OFF)
+
 if(QTET_ENABLE_DTK)
     find_package(Dtk6Core REQUIRED)
     find_package(Dtk6Gui REQUIRED)

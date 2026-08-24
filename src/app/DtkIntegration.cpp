@@ -17,10 +17,8 @@ void DtkIntegration::initEarly()
 
 void DtkIntegration::initAfterApp()
 {
-    auto *helper = DGuiApplicationHelper::instance();
-    // 显式跟随系统主题；若 API 名在目标 dtkgui 版本中不存在，仅实例化 helper 即可（默认即跟随系统）
-    if (helper && helper->applicationPaletteType() == DGuiApplicationHelper::UnknownType)
-        helper->setApplicationPaletteType(DGuiApplicationHelper::SystemType);
+    // 实例化即应用系统主题（默认跟随亮/暗），无需调用版本敏感的 palette API
+    DGuiApplicationHelper::instance();
 }
 
 #else
