@@ -23,6 +23,7 @@
 #include "sqlite_repository/NetworkConfigRepository.h"
 #include "daemon_service/DaemonApi.h"
 #include "daemon_service/DaemonClient.h"
+#include "daemon_service/DaemonEndpoint.h"
 #include "system_tray/SystemTrayManager.h"
 #include "system_tray/TrayMessageHelper.h"
 #include "platform/DaemonRegisterHelper.h"
@@ -59,7 +60,7 @@ AppServices::AppServices(const QSqlDatabase &database,
     // ===== daemon IPC 客户端与 API =====
     m_daemonClient = new DaemonClient(parentObject);
     if (daemonConnectionMode == ConnectToDaemon)
-        m_daemonClient->connectToDaemon(QStringLiteral("qtet-daemon.sock"));
+        m_daemonClient->connectToDaemon(DaemonEndpoint::socketPath());
     m_daemonApi = new DaemonApi(m_daemonClient, parentObject);
     m_backendStatusViewModel = new BackendStatusViewModel(m_daemonClient, parentObject);
 
@@ -338,6 +339,9 @@ void AppServices::ensureDaemonServiceOnce()
 #if defined(Q_OS_WIN)
         text = QStringLiteral("后端服务尚未注册。\n\nQtEasyTier 需要将当前程序目录下的 qtet-daemon.exe 注册为 Windows 服务：\n%1\n\n点击“是”后将通过 UAC 请求管理员权限，依次执行 qtet-daemon.exe --install 和 qtet-daemon.exe --start。\n点击“否”将退出程序。")
                    .arg(DaemonRegisterHelper::daemonBinaryPath());
+#elif defined(Q_OS_MACOS)
+        text = QStringLiteral("后端服务尚未注册。\n\nQtEasyTier 需要将程序内的 qtet-daemon 注册为 macOS 系统级后台服务（LaunchDaemon）：\n%1\n\n点击“是”后将请求管理员授权，把 qtet-daemon 安装到 /Library/PrivilegedHelperTools 并以 root 启动。\n点击“否”将退出程序。")
+                   .arg(DaemonRegisterHelper::daemonBinaryPath());
 #else
         text = QStringLiteral("后端服务尚未注册。\n\nQtEasyTier 需要将当前程序目录下的 qtet-daemon 注册为系统服务：\n%1\n\n点击“是”后将通过 pkexec 请求管理员权限并注册、启动 qtet-daemon.service。\n点击“否”将退出程序。")
                    .arg(DaemonRegisterHelper::daemonBinaryPath());
@@ -345,6 +349,8 @@ void AppServices::ensureDaemonServiceOnce()
     } else {
 #if defined(Q_OS_WIN)
         text = QStringLiteral("后端服务尚未运行。\n\n检测到 qtet-daemon Windows 服务已注册，但 qtet-daemon 进程未运行。\n\n点击“是”后将通过 UAC 请求管理员权限并执行 qtet-daemon.exe --start。\n点击“否”将退出程序。");
+#elif defined(Q_OS_MACOS)
+        text = QStringLiteral("后端服务尚未运行。\n\n检测到 qtet-daemon 已注册为 macOS LaunchDaemon，但 qtet-daemon 进程未运行。\n\n点击“是”后将请求管理员授权并启动该服务。\n点击“否”将退出程序。");
 #else
         text = QStringLiteral("后端服务尚未运行。\n\n检测到 qtet-daemon.service 已注册，但 qtet-daemon 进程未运行。\n\n点击“是”后将通过 pkexec 请求管理员权限并启动 qtet-daemon.service。\n点击“否”将退出程序。");
 #endif
@@ -365,6 +371,8 @@ void AppServices::ensureDaemonServiceOnce()
         result == DaemonRegisterHelper::EnsureResult::StartFailed) {
 #if defined(Q_OS_WIN)
         const QString failureText = QStringLiteral("无法注册或启动 qtet-daemon Windows 服务，应用即将退出。");
+#elif defined(Q_OS_MACOS)
+        const QString failureText = QStringLiteral("无法注册或启动 qtet-daemon LaunchDaemon 服务，应用即将退出。");
 #else
         const QString failureText = QStringLiteral("无法注册或启动 qtet-daemon.service，应用即将退出。");
 #endif

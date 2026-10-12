@@ -115,6 +115,27 @@ cmake -B build -S . -DBUILD_WITH_DDE=ON -DBUILD_WITH_DDE_TRAY_PLUGIN=ON
 sudo cmake --install build
 ```
 
+### macOS 构建
+
+后端 `qtet-daemon` 以 root 运行（launchd LaunchDaemon），前端 `.app` 以普通用户运行并显示界面。构建需 Qt 6.8、CMake 3.16+ 与**静态 OpenSSL**（通过 `OPENSSL_ROOT_DIR` 指定，需 arm64 + x86_64 Universal 才可产出 Universal 应用），默认最低支持 macOS 13：
+
+```bash
+cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+      -DOPENSSL_ROOT_DIR=/path/to/openssl-universal
+cmake --build build -j
+```
+
+产物在 `build/Output/appQtEasyTier.app`（`qtet-daemon` 已收进 `Contents/MacOS/`）。首次运行会弹出管理员授权，把 `qtet-daemon` 安装到 `/Library/PrivilegedHelperTools` 并注册为 LaunchDaemon；前端界面以当前用户运行，无需授权即可显示。
+
+打包（macdeployqt + ad-hoc 签名 + zip/dmg）：
+
+```bash
+cd build/Output && bash ../../package/macos/build_macos.sh -v 3.3.0
+```
+
+> macOS 产物未使用 Developer ID 签名与公证，首次打开需「右键 → 打开」，或执行 `xattr -dr com.apple.quarantine /Applications/QtEasyTier.app`。
+
 ### 只构建前端
 
 ```bash

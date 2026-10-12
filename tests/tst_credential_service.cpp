@@ -40,8 +40,10 @@ private:
     /// 生成随机临时 socket 路径，避免并发测试冲突
     static QString tempSockPath()
     {
-        return QDir::temp().filePath(QStringLiteral("qtet-cred-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        // macOS unix socket 路径上限 104 字节（sun_path 含结尾 NUL）；QDir::temp() 前缀
+        // 已达 ~48 字符，名字过长会让 QLocalServer::listen 直接失败，故保持短前缀 + 8 位 UUID。
+        return QDir::temp().filePath(QStringLiteral("crd-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
     }
 
     /// 连接 DaemonClient 并等待进入 Connected 状态

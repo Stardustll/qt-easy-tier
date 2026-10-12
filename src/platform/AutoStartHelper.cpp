@@ -32,6 +32,12 @@ constexpr char kAutoStartArg[] = "--autostart";
 #if defined(Q_OS_LINUX)
 QString g_desktopFilePathOverride;
 #endif
+#if defined(Q_OS_MACOS)
+// macOS 用户域 LaunchAgent 标识与文件名
+constexpr char kLaunchAgentLabel[] = "cn.qtet.qteasytier.autostart";
+constexpr char kLaunchAgentFileName[] = "cn.qtet.qteasytier.autostart.plist";
+QString g_launchAgentFilePathOverride;
+#endif
 } // namespace
 
 bool AutoStartHelper::setAutoStart(bool enabled)
@@ -115,7 +121,50 @@ bool AutoStartHelper::setAutoStart(bool enabled)
         return true;
     }
 
-    // ========== 其他平台（macOS 等）：暂不支持 ==========
+    // ========== macOS 平台：用户域 LaunchAgent ==========
+#elif defined(Q_OS_MACOS)
+    // plist 路径：~/Library/LaunchAgents/cn.qtet.qteasytier.autostart.plist
+    const QString plistPath = launchAgentFilePath();
+    if (enabled) {
+        // 确保 LaunchAgents 目录存在（通常已存在）
+        QDir dir(QFileInfo(plistPath).path());
+        if (!dir.exists() && !dir.mkpath(".")) {
+            LogHelper::logWarning("创建 macOS LaunchAgents 目录失败", "AutoStart");
+            return false;
+        }
+
+        QFile file(plistPath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            LogHelper::logWarning("打开 macOS LaunchAgent plist 文件失败", "AutoStart");
+            return false;
+        }
+
+        QTextStream stream(&file);
+        stream << launchAgentPlistContent();
+        file.close();
+
+        // close() 后会刷新 QFile::error()，检查写入过程是否有错误
+        const bool ok = file.error() == QFile::NoError;
+        if (ok) {
+            LogHelper::logInfo(QStringLiteral("macOS 开机自启动设置成功：%1").arg(plistPath), "AutoStart");
+        } else {
+            LogHelper::logWarning("macOS 开机自启动设置失败", "AutoStart");
+        }
+        return ok;
+    } else {
+        // 取消自启动：直接删除 plist 文件
+        QFile file(plistPath);
+        if (!file.exists())
+            return true; // 文件本就不存在，视为取消成功（幂等操作）
+        if (!file.remove()) {
+            LogHelper::logWarning("删除 macOS LaunchAgent plist 文件失败", "AutoStart");
+            return false;
+        }
+        LogHelper::logInfo(QStringLiteral("macOS 开机自启动取消成功：%1").arg(plistPath), "AutoStart");
+        return true;
+    }
+
+    // ========== 其他平台：暂不支持 ==========
 #else
     Q_UNUSED(enabled)
     LogHelper::logWarning("当前平台不支持开机自启动设置", "AutoStart");
@@ -133,6 +182,10 @@ bool AutoStartHelper::isAutoStartEnabled()
     // ========== Linux 平台：检查 .desktop 文件是否存在 ==========
 #elif defined(Q_OS_LINUX)
     return QFile::exists(desktopFilePath());
+
+    // ========== macOS 平台：检查 LaunchAgent plist 是否存在 ==========
+#elif defined(Q_OS_MACOS)
+    return QFile::exists(launchAgentFilePath());
 
     // ========== 其他平台：始终认为未设置 ==========
 #else
@@ -176,5 +229,73 @@ QString AutoStartHelper::desktopFilePath()
 QString AutoStartHelper::executablePath()
 {
     return QCoreApplication::applicationFilePath();
+}
+#endif
+
+// ========== macOS 平台专用辅助方法实现 ==========
+#if defined(Q_OS_MACOS)
+
+void AutoStartHelper::setLaunchAgentFilePathOverrideForTesting(const QString &path)
+{
+    g_launchAgentFilePathOverride = path;
+}
+
+/**
+ * @brief 返回 macOS 自启动 LaunchAgent plist 完整路径
+ *
+ * 路径拼接规则：
+ *   QStandardPaths::HomeLocation = /Users/<user>
+ *   → ~/Library/LaunchAgents/cn.qtet.qteasytier.autostart.plist
+ *
+ * LaunchAgents 目录由 launchd 在用户登录会话中自动扫描并加载，
+ * 无需管理员权限，也不属于 LaunchDaemons（后者以 root 运行且不可显示 GUI）。
+ */
+QString AutoStartHelper::launchAgentFilePath()
+{
+    if (!g_launchAgentFilePathOverride.isEmpty())
+        return g_launchAgentFilePathOverride;
+
+    const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+    return QDir(home).filePath(QStringLiteral("Library/LaunchAgents/%1").arg(QLatin1String(kLaunchAgentFileName)));
+}
+
+/**
+ * @brief 返回当前可执行文件完整路径
+ *
+ * .app 内该值为 .../QtEasyTier.app/Contents/MacOS/appQtEasyTier，
+ * 用于填充 LaunchAgent 的 ProgramArguments[0]；启动时额外附加 --autostart。
+ */
+QString AutoStartHelper::executablePath()
+{
+    return QCoreApplication::applicationFilePath();
+}
+
+/**
+ * @brief 生成 LaunchAgent plist 内容
+ *
+ * RunAtLoad=true：登录会话建立后由 launchd 自动启动；
+ * ProgramArguments 携带 --autostart，供 AppLaunchManager::isAutoStartLaunch() 识别，
+ * 从而在托盘可用时隐藏启动，避免登录后窗口闪现。
+ */
+QString AutoStartHelper::launchAgentPlistContent()
+{
+    QString content;
+    QTextStream stream(&content);
+    stream << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+    stream << "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n";
+    stream << "<plist version=\"1.0\">\n";
+    stream << "<dict>\n";
+    stream << "    <key>Label</key>\n";
+    stream << "    <string>" << QLatin1String(kLaunchAgentLabel) << "</string>\n";
+    stream << "    <key>ProgramArguments</key>\n";
+    stream << "    <array>\n";
+    stream << "        <string>" << executablePath() << "</string>\n";
+    stream << "        <string>" << QLatin1String(kAutoStartArg) << "</string>\n";
+    stream << "    </array>\n";
+    stream << "    <key>RunAtLoad</key>\n";
+    stream << "    <true/>\n";
+    stream << "</dict>\n";
+    stream << "</plist>\n";
+    return content;
 }
 #endif

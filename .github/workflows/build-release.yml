@@ -199,6 +199,35 @@ jobs:
             build/Package/qteasytier_v${{ needs.release-info.outputs.version }}_windows_amd64.exe
           if-no-files-found: error
 
+  macos-universal:
+    name: macOS build universal
+    runs-on: macos-14
+    needs:
+      - release-info
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and test
+        id: build
+        uses: ./.github/actions/build-macos
+
+      - name: Build package
+        working-directory: ${{ github.workspace }}/build/Output
+        run: |
+          bash "${{ github.workspace }}/package/macos/build_macos.sh" \
+            -v "${{ needs.release-info.outputs.version }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qteasytier-v${{ needs.release-info.outputs.version }}-macos-universal
+          path: |
+            build/Output/qteasytier_v${{ needs.release-info.outputs.version }}_macos_universal.zip
+            build/Output/qteasytier_v${{ needs.release-info.outputs.version }}_macos_universal.dmg
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release
     runs-on: ubuntu-24.04
@@ -206,6 +235,7 @@ jobs:
       - release-info
       - linux-deb
       - windows-zip
+      - macos-universal
     environment:
       name: qteasytier-release
 

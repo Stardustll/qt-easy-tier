@@ -71,8 +71,11 @@ private slots:
 private:
     static QString uniqueServerName()
     {
-        return QStringLiteral("cn.qtet.qteasytier-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+        // macOS unix socket 路径上限 104 字节（sun_path 含结尾 NUL）；相对名会拼到
+        // QDir::tempPath() 之下，名字过长会让 QLocalServer::listen 直接失败，
+        // 故保持短前缀 + 仅取 UUID 前 8 位。
+        return QStringLiteral("alm-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8));
     }
 };
 

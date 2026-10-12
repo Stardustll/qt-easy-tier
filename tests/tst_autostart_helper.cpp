@@ -1,9 +1,10 @@
 /**
  * @file tst_autostart_helper.cpp
- * @brief 开机自启动辅助工具模块的单元测试。测试内容：Linux XDG Autostart 自启动条目创建、自启动条目删除、默认状态检查。
+ * @brief 开机自启动辅助工具模块的单元测试。测试内容：Linux XDG Autostart / macOS LaunchAgent 自启动条目创建、删除、默认状态检查。
  *
  * 覆盖：
  * - Linux：XDG Autostart .desktop 文件创建/删除（使用临时目录隔离）
+ * - macOS：LaunchAgent plist 创建/删除（使用临时目录隔离）
  *
  * 每个测试独立运行，initTestCase/cleanupTestCase 确保初始状态干净。
  */
@@ -26,6 +27,11 @@ private slots:
         m_desktopPath = QDir(m_tempDir.path()).filePath(QStringLiteral("autostart/QtEasyTier.desktop"));
         AutoStartHelper::setDesktopFilePathOverrideForTesting(m_desktopPath);
         AutoStartHelper::setAutoStart(false);
+#elif defined(Q_OS_MACOS)
+        QVERIFY(m_tempDir.isValid());
+        m_plistPath = QDir(m_tempDir.path()).filePath(QStringLiteral("cn.qtet.qteasytier.autostart.plist"));
+        AutoStartHelper::setLaunchAgentFilePathOverrideForTesting(m_plistPath);
+        AutoStartHelper::setAutoStart(false);
 #else
         QSKIP("AutoStartHelper tests require an isolated backend on this platform");
 #endif
@@ -37,11 +43,15 @@ private slots:
 #if defined(Q_OS_LINUX)
         AutoStartHelper::setAutoStart(false);
         AutoStartHelper::setDesktopFilePathOverrideForTesting(QString());
+#elif defined(Q_OS_MACOS)
+        AutoStartHelper::setAutoStart(false);
+        AutoStartHelper::setLaunchAgentFilePathOverrideForTesting(QString());
 #endif
     }
 
     /// 测试目标: 验证 setAutoStart(true) 正确创建自启动条目
     /// - Linux: 检查临时 autostart/QtEasyTier.desktop 文件存在且内容正确
+    /// - macOS: 检查临时 LaunchAgent plist 存在且内容正确
     void setAutoStart_createsEntry()
     {
         QVERIFY(AutoStartHelper::setAutoStart(true));
@@ -58,6 +68,17 @@ private slots:
         QVERIFY(content.contains("[Desktop Entry]"));
         QVERIFY(content.contains("--autostart"));
         QVERIFY(content.contains("Exec="));
+#elif defined(Q_OS_MACOS)
+        // 检查 LaunchAgent plist 已创建
+        QFile file(m_plistPath);
+        QVERIFY(file.exists());
+        QVERIFY(file.open(QIODevice::ReadOnly | QIODevice::Text));
+        const QByteArray content = file.readAll();
+        // 检查文件内容包含必要的 LaunchAgent 字段
+        QVERIFY(content.contains("<key>Label</key>"));
+        QVERIFY(content.contains("cn.qtet.qteasytier.autostart"));
+        QVERIFY(content.contains("<key>RunAtLoad</key>"));
+        QVERIFY(content.contains("--autostart"));
 #endif
     }
 
@@ -84,6 +105,7 @@ private slots:
 private:
     QTemporaryDir m_tempDir;
     QString m_desktopPath;
+    QString m_plistPath;
 };
 
 QTEST_MAIN(TestAutoStartHelper)

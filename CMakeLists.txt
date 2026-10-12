@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 
 project(QtEasyTier VERSION 3.3.0 LANGUAGES CXX)
 set(EASYTIER_FFI_VER 2.6.4)
-set(QTET_DAEMON_VER 0.1.1)
+set(QTET_DAEMON_VER 0.2.0)
 
 # 向 C++ 侧暴露版本号
 configure_file(
@@ -20,6 +20,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
+
+# macOS：构建 Universal 二进制（arm64 + x86_64），最低支持 macOS 13（Ventura）。
+# 该架构/部署目标会一并透传给 qtet-daemon 后端构建（见 cmake/QtEasyTierDaemon.cmake），
+# 保证 .app 与内置 daemon 架构一致。
+if(APPLE)
+    # 默认 Universal；本地单架构调试可用 -DCMAKE_OSX_ARCHITECTURES=arm64 覆盖
+    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "macOS 构建架构（默认 Universal）")
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "最低支持 macOS 版本")
+endif()
 
 # 构建后端的可选参数
 option(BUILD_WITH_DAEMON "Build and collect qtet-daemon runtime" ON)
@@ -106,10 +115,22 @@ if(WIN32)
     set_source_files_properties("${QTET_WINDOWS_RC}" PROPERTIES GENERATED TRUE)
 endif()
 
+# macOS：把 .icns 图标打包进 .app/Contents/Resources（由 Info.plist 的 CFBundleIconFile 引用）
+if(APPLE)
+    set(QTET_MACOS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/assets/favicon/qtet.icns")
+    if(NOT EXISTS "${QTET_MACOS_ICON}")
+        message(FATAL_ERROR "macOS icon file not found: ${QTET_MACOS_ICON}")
+    endif()
+    set_source_files_properties("${QTET_MACOS_ICON}" PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+endif()
+
 # SwbControls 主题图标资源（月/太阳等）仅共享前端构建嵌入
 set(QTET_APP_EXTRA_SOURCES "")
 if(NOT BUILD_WITH_DDE)
     list(APPEND QTET_APP_EXTRA_SOURCES ThirdParty/SWB-QML-UI/assets/theme.qrc)
+endif()
+if(APPLE)
+    list(APPEND QTET_APP_EXTRA_SOURCES ${QTET_MACOS_ICON})
 endif()
 
 qt_add_executable(appQtEasyTier
@@ -122,6 +143,10 @@ qt_add_executable(appQtEasyTier
 target_include_directories(appQtEasyTier PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_BINARY_DIR}/generated ${CMAKE_SOURCE_DIR}/ThirdParty/toml++)
 
 set_target_properties(appQtEasyTier PROPERTIES
+    MACOSX_BUNDLE_BUNDLE_NAME "QtEasyTier"
+    MACOSX_BUNDLE_GUI_IDENTIFIER "cn.qtet.qteasytier"
+    MACOSX_BUNDLE_ICON_FILE "qtet.icns"
+    MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/cmake/macos/Info.plist.in"
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE

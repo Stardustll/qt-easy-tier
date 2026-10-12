@@ -25,8 +25,14 @@ namespace {
 QStringList g_qmlMessages;
 void qmlMessageCollector(QtMsgType type, const QMessageLogContext &context, const QString &msg)
 {
-    if (type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
-        g_qmlMessages.append(QStringLiteral("%1:%2 %3").arg(context.file).arg(context.line).arg(msg));
+    if (type != QtWarningMsg && type != QtCriticalMsg && type != QtFatalMsg)
+        return;
+    // 忽略 Qt 字体库内部提示（与本页 QML 无关）：字体族别名首次解析时的性能告警。
+    // 典型出现在 QT_QPA_PLATFORM=offscreen（字体库为空，任何字体族查询都会触发，
+    // 例如 "…missing font family "Sans Serif"…"），原生平台一般不出现。
+    if (msg.contains(QStringLiteral("Populating font family aliases")))
+        return;
+    g_qmlMessages.append(QStringLiteral("%1:%2 %3").arg(context.file).arg(context.line).arg(msg));
 }
 } // namespace
 

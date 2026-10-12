@@ -62,3 +62,22 @@ jobs:
           name: qteasytier-pr-${{ github.event.pull_request.number }}-windows-amd64
           path: build/Output
           if-no-files-found: error
+
+  macos-universal:
+    name: macOS build universal
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and test
+        id: build
+        uses: ./.github/actions/build-macos
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: qteasytier-pr-${{ github.event.pull_request.number }}-macos-universal
+          path: build/Output
+          if-no-files-found: error

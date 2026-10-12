@@ -26,6 +26,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include "IpcMessage.h"
+#include "DaemonEndpoint.h"
 
 /**
  * @class DaemonClient
@@ -85,12 +86,13 @@ public:
      * @brief 启动到 daemon 的异步连接
      *
      * 调用后状态立即切换为 Connecting，实际连接成功或失败由
-     * connectionStateChanged 信号异步通知。默认 socket 名称为
-     * "qtet-daemon.sock"，可通过参数指定不同的 socket 名称。
+     * connectionStateChanged 信号异步通知。默认端点为平台相关值
+     * （DaemonEndpoint::socketPath()：Linux/Windows 为裸名称 "qtet-daemon.sock"，
+     * macOS 为共享绝对路径 /var/run/qtet-daemon.sock），可通过参数指定不同的端点。
      *
-     * @param socketName 本地 Unix Domain Socket 名称
+     * @param socketName 本地 Unix Domain Socket 名称或绝对路径
      */
-    void connectToDaemon(const QString &socketName = QStringLiteral("qtet-daemon.sock"));
+    void connectToDaemon(const QString &socketName = DaemonEndpoint::socketPath());
 
     /**
      * @brief 断开与 daemon 的连接

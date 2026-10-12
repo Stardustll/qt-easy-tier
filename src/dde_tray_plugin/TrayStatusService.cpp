@@ -3,6 +3,7 @@
 
 #include "config/ConfigPayloadBuilder.h"
 #include "daemon_service/DaemonApi.h"
+#include "daemon_service/DaemonEndpoint.h"
 #include "sqlite_repository/DatabaseConnection.h"
 #include "sqlite_repository/NetworkConfigRepository.h"
 
@@ -31,7 +32,7 @@ TrayStatusService::TrayStatusService(const QString &databasePath, QObject *paren
     m_timer->setInterval(3000);
     connect(m_timer, &QTimer::timeout, this, &TrayStatusService::onHeartbeat);
     setDaemonState(m_client->connectionState());
-    m_client->connectToDaemon(QStringLiteral("qtet-daemon.sock"));
+    m_client->connectToDaemon(DaemonEndpoint::socketPath());
 }
 
 TrayStatusService::~TrayStatusService()

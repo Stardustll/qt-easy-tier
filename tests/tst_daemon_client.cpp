@@ -7,6 +7,9 @@
  * - 异步请求-响应匹配（含超时、错误响应、非法帧过滤）
  * - DaemonApi 方法映射
  * - 主动断开不触发自动重连
+ *
+ * socket 名统一保持短小（短前缀 + 8 位 UUID）：macOS unix socket 路径上限 104 字节
+ * （sun_path 含结尾 NUL），QDir::temp() 前缀较长，名字过长会让 QLocalServer::listen 失败。
  */
 #include <QTest>
 #include <QSignalSpy>
@@ -70,8 +73,8 @@ private slots:
     {
         // 准备模拟 daemon 服务端
         QLocalServer server;
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         QVERIFY(server.listen(sockPath));
 
         bool gotConnection = false;
@@ -115,8 +118,8 @@ private slots:
     {
         // 准备模拟 daemon 服务端并记录收到的 method 和 params
         QLocalServer server;
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         QVERIFY(server.listen(sockPath));
 
         QStringList methods;
@@ -205,8 +208,8 @@ private slots:
     {
         // 准备服务端：收到消息但不回复，触发超时
         QLocalServer server;
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         QVERIFY(server.listen(sockPath));
 
         DaemonClient client;
@@ -259,8 +262,8 @@ private slots:
     {
         // 准备服务端：写入非法帧
         QLocalServer server;
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         QVERIFY(server.listen(sockPath));
 
         DaemonClient client;
@@ -290,8 +293,8 @@ private slots:
     {
         // 准备服务端：回复错误消息
         QLocalServer server;
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         QVERIFY(server.listen(sockPath));
 
         connect(&server, &QLocalServer::newConnection, [&]() {
@@ -333,8 +336,8 @@ private slots:
     /// 故在状态切入 Connecting 的瞬间（信号槽内、connectToServer 之前）执行主动断开。
     void manualDisconnectDuringConnectingDoesNotReconnect()
     {
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
 
         DaemonClient client;
         QSignalSpy stateSpy(&client, &DaemonClient::connectionStateChanged);
@@ -371,8 +374,8 @@ private slots:
     {
         // 准备模拟 daemon 服务端
         QLocalServer server;
-        const QString sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        const QString sockPath = QDir::temp().filePath(QStringLiteral("dc-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         QVERIFY(server.listen(sockPath));
 
         DaemonClient client;

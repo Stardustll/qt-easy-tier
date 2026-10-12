@@ -3,6 +3,7 @@ include:
   - .cnb/deepin.yml
   # 由于 CNB 下 Windows 构建不够成熟，暂时放弃 Windows 原生构建
   #- .cnb/windows.yml
+  # macOS 构建无 CNB runner，仅在 GitHub Actions 上执行（见 .github/actions/build-macos）
   - .cnb/sync_github.yml
   - .cnb/aur.yml
   

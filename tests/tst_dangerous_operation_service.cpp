@@ -42,8 +42,10 @@ public:
 
     bool start()
     {
-        m_sockPath = QDir::temp().filePath(QStringLiteral("qtet-danger-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        // macOS unix socket 路径上限 104 字节（sun_path 含结尾 NUL）；QDir::temp() 前缀
+        // 已达 ~48 字符，名字过长会让 QLocalServer::listen 直接失败，故保持短前缀 + 8 位 UUID。
+        m_sockPath = QDir::temp().filePath(QStringLiteral("dng-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         if (!m_server.listen(m_sockPath))
             return false;
         connect(&m_server, &QLocalServer::newConnection, this, &FakeDaemon::onNewConnection);

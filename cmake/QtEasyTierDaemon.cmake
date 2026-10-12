@@ -14,9 +14,10 @@ function(qtet_configure_daemon)
         set(CLONE_DAEMON_FROM "GITHUB")
     endif()
     if(CLONE_DAEMON_FROM STREQUAL "CNB")
-        set(qtet_daemon_repo_url "https://cnb.cool/myqfeng/qteasytier/et-daemon.asio")
+        # macOS 支持（0.2.0）目前仅发布在本 fork 上，原作者仓库尚未合入
+        set(qtet_daemon_repo_url "https://cnb.cool/tflystar/et-daemon.asio")
     else()
-        set(qtet_daemon_repo_url "https://github.com/qteasytier/et-daemon.asio.git")
+        set(qtet_daemon_repo_url "https://github.com/Stardustll/et-daemon.asio.git")
     endif()
     message(STATUS "qtet-daemon clone source: ${CLONE_DAEMON_FROM} -> ${qtet_daemon_repo_url}")
 
@@ -59,6 +60,15 @@ function(qtet_configure_daemon)
     if(DEFINED CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_TOOLCHAIN_FILE STREQUAL "")
         list(APPEND qtet_daemon_build_command "-DQTET_DAEMON_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}")
     endif()
+    # macOS：把 Universal 架构与部署目标透传给 qtet-daemon，保证 .app 与内置 daemon 架构一致。
+    # CMAKE_OSX_ARCHITECTURES 是列表（"arm64;x86_64"）：须转义分号后作为单个 -D 参数传递，
+    # 否则会被拆成两个 argv，下游 BuildDaemon.cmake 只能收到第一个架构。
+    if(APPLE)
+        string(REPLACE ";" "\\;" qtet_daemon_osx_arches "${CMAKE_OSX_ARCHITECTURES}")
+        list(APPEND qtet_daemon_build_command
+            "-DQTET_DAEMON_OSX_ARCHITECTURES=${qtet_daemon_osx_arches}"
+            "-DQTET_DAEMON_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+    endif()
     list(APPEND qtet_daemon_build_command -P "${CMAKE_SOURCE_DIR}/cmake/scripts/BuildDaemon.cmake")
 
     message(STATUS "Building qtet-daemon runtime during configure")
@@ -86,4 +96,26 @@ endfunction()
 
 function(qtet_attach_daemon_to_app target_name)
     # qtet-daemon is prepared during CMake configure, not as an app build dependency.
+    # macOS：把已收集到 Output 的 qtet-daemon 拷进 .app/Contents/MacOS/，
+    # 使 applicationDirPath()/qtet-daemon 能定位到它（DaemonRegisterHelper 依赖此约定），
+    # 随后由前端在首次运行时经管理员授权安装到 /Library/PrivilegedHelperTools。
+    if(APPLE AND BUILD_WITH_DAEMON AND EXISTS "${QTET_OUTPUT_DIR}/qtet-daemon")
+        add_custom_command(TARGET ${target_name} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${QTET_OUTPUT_DIR}/qtet-daemon"
+                    "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/MacOS/qtet-daemon"
+            COMMENT "Bundle qtet-daemon into ${target_name}.app/Contents/MacOS"
+        )
+        # daemon 经 @loader_path 解析 EasyTier FFI（@rpath/libeasytier_ffi.dylib），
+        # 须与 daemon 同目录入包——安装脚本据此把它一并装到 helper 同目录，
+        # 否则安装到 /Library/PrivilegedHelperTools 后 daemon 无法启动。
+        if(EXISTS "${QTET_OUTPUT_DIR}/libeasytier_ffi.dylib")
+            add_custom_command(TARGET ${target_name} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        "${QTET_OUTPUT_DIR}/libeasytier_ffi.dylib"
+                        "$<TARGET_BUNDLE_CONTENT_DIR:${target_name}>/MacOS/libeasytier_ffi.dylib"
+                COMMENT "Bundle libeasytier_ffi.dylib into ${target_name}.app/Contents/MacOS"
+            )
+        endif()
+    endif()
 endfunction()

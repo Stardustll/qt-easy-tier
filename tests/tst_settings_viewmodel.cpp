@@ -326,8 +326,10 @@ private:
     bool startAutoReconnectFakeDaemon(QLocalServer &server, QString &sockPath,
                                       bool &autoReconnectValue, bool &failRequests)
     {
-        sockPath = QDir::temp().filePath(QStringLiteral("qtet-test-%1.sock")
-            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces)));
+        // 短名：macOS unix socket 路径上限 104 字节（sun_path 含 NUL），QDir::temp()
+        // 前缀较长，名字过长会让 QLocalServer::listen 直接失败
+        sockPath = QDir::temp().filePath(QStringLiteral("svm-%1.sock")
+            .arg(QUuid::createUuid().toString(QUuid::WithoutBraces).left(8)));
         if (!server.listen(sockPath))
             return false;
 

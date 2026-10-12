@@ -47,6 +47,16 @@ public:
     static void setDaemonProcessRunningOverrideForTesting(bool enabled, bool running);
 #endif
 
+#if defined(Q_OS_MACOS)
+    static void setLaunchDaemonPlistPathOverrideForTesting(const QString &path);
+    static void setDaemonBinaryPathOverrideForTesting(const QString &path);
+    static void setServiceRegisteredOverrideForTesting(bool enabled, bool registered);
+    static void setDaemonProcessRunningOverrideForTesting(bool enabled, bool running);
+    static QString launchDaemonPlistContentForTesting(const QString &daemonPath);
+    static QString installScriptContentForTesting(const QString &daemonPath, const QString &libPath,
+                                                  const QString &plistPath);
+#endif
+
 private:
     DaemonRegisterHelper() = default;
 };

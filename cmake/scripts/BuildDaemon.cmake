@@ -105,6 +105,16 @@ endif()
 if(DEFINED QTET_DAEMON_TOOLCHAIN_FILE AND NOT QTET_DAEMON_TOOLCHAIN_FILE STREQUAL "")
     list(APPEND configure_command -DCMAKE_TOOLCHAIN_FILE=${QTET_DAEMON_TOOLCHAIN_FILE})
 endif()
+# macOS：透传 Universal 架构与部署目标（由根 CMakeLists 经 QtEasyTierDaemon.cmake 传入）。
+# CMAKE_OSX_ARCHITECTURES 是 CMake 列表（"arm64;x86_64"）：直接内插会被列表语义拆成
+# 两个 argv（子 cmake 只收到首个架构，退化为单架构），故先转义分号，保持为单个 -D 值。
+if(DEFINED QTET_DAEMON_OSX_ARCHITECTURES AND NOT QTET_DAEMON_OSX_ARCHITECTURES STREQUAL "")
+    string(REPLACE ";" "\\;" qtet_daemon_osx_arches "${QTET_DAEMON_OSX_ARCHITECTURES}")
+    list(APPEND configure_command "-DCMAKE_OSX_ARCHITECTURES=${qtet_daemon_osx_arches}")
+endif()
+if(DEFINED QTET_DAEMON_OSX_DEPLOYMENT_TARGET AND NOT QTET_DAEMON_OSX_DEPLOYMENT_TARGET STREQUAL "")
+    list(APPEND configure_command "-DCMAKE_OSX_DEPLOYMENT_TARGET=${QTET_DAEMON_OSX_DEPLOYMENT_TARGET}")
+endif()
 
 execute_process(
     COMMAND ${configure_command}
