@@ -6,6 +6,7 @@
 
 #include "system_tray/TrayMessageDispatcher.h"
 #include "system_tray/TrayMessageHelper.h"
+#include "platform/MacDockVisibility.h"
 #include "log/LogHelper.h"
 
 #include <QAction>
@@ -51,6 +52,12 @@ void SystemTrayManager::setMainWindow(QWindow *window)
         connect(m_mainWindow, &QWindow::visibleChanged,
                 this, &SystemTrayManager::updateWindowActionText,
                 Qt::UniqueConnection);
+        // 主窗口显示/隐藏时同步 Dock 图标可见性
+        connect(m_mainWindow, &QWindow::visibleChanged,
+                this, [this]() { syncDockIconWithWindow(); });
+        // 初始 Dock 状态延后一轮：main.cpp 随后会按普通启动/--autostart 决定是否显示窗口，
+        // 让首帧状态先落定，避免启动瞬间 Dock 图标闪动（隐藏启动时最终定格为无 Dock 图标）。
+        QTimer::singleShot(0, this, [this]() { syncDockIconWithWindow(); });
         connect(m_mainWindow, &QObject::destroyed, this, [this, window]() {
             // QML 根窗口可能早于托盘管理器析构；窗口销毁后必须清空弱引用，避免退出时访问悬空窗口。
             if (m_mainWindow == window)
@@ -206,6 +213,17 @@ void SystemTrayManager::createTrayIcon()
 
     m_trayIcon->show();
     refreshTrayStatus();
+}
+
+void SystemTrayManager::syncDockIconWithWindow()
+{
+    // 托盘不可用时若移除 Dock 图标，用户将无法找回被隐藏的窗口，故始终保留 Dock 图标。
+    if (!isAvailable()) {
+        MacDockVisibility::setDockIconVisible(true);
+        return;
+    }
+
+    MacDockVisibility::setDockIconVisible(m_mainWindow && m_mainWindow->isVisible());
 }
 
 void SystemTrayManager::updateWindowActionText()

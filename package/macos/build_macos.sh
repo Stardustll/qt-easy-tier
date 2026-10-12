@@ -44,7 +44,7 @@ done
 
 if [[ -z "$VERSION" ]]; then
     echo "用法: $(basename "$0") -v <版本号> [-q <Qt>/bin]"
-    echo "示例: $(basename "$0") -v 3.3.0 -q ~/Qt/6.11.0/macos/bin"
+    echo "示例: $(basename "$0") -v 3.3.0 -q ~/Qt/6.12.0/macos/bin"
     echo "  -q 用于指定与构建一致的 Qt 的 bin 目录（内含 macdeployqt）；"
     echo "     缺省时自动探测，务必避免误用其它大版本 Qt 的 macdeployqt。"
     exit 1

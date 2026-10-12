@@ -71,6 +71,8 @@ protected:
 
 private:
     void createTrayIcon();
+    /** @brief 依据主窗口可见性同步 Dock 图标显隐（仅 macOS 生效，托盘不可用时始终保留） */
+    void syncDockIconWithWindow();
     void updateWindowActionText();
     void updateStatusActions();
     void updateTrayIcon();

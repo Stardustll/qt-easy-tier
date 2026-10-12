@@ -117,7 +117,7 @@ sudo cmake --install build
 
 ### macOS 构建
 
-后端 `qtet-daemon` 以 root 运行（launchd LaunchDaemon），前端 `.app` 以普通用户运行并显示界面。构建需 Qt 6.8、CMake 3.16+ 与**静态 OpenSSL**（通过 `OPENSSL_ROOT_DIR` 指定，需 arm64 + x86_64 Universal 才可产出 Universal 应用），默认最低支持 macOS 13：
+后端 `qtet-daemon` 以 root 运行（launchd LaunchDaemon），前端 `.app` 以普通用户运行并显示界面。macOS 构建需 **Qt 6.12.0 或更新版本**（6.8.x–6.11.x 的 cocoa 插件在 macOS 26/27 上点击托盘图标会崩溃，见 QTBUG-147449）、CMake 3.16+ 与**静态 OpenSSL**（通过 `OPENSSL_ROOT_DIR` 指定，需 arm64 + x86_64 Universal 才可产出 Universal 应用），默认最低支持 macOS 13：
 
 ```bash
 cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release \

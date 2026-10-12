@@ -9,7 +9,7 @@ inputs:
   qt_version:
     description: Qt 版本号。
     required: false
-    default: 6.8.3
+    default: 6.12.0
   extract_version:
     description: 是否从 CMakeLists.txt 提取项目版本号并作为 outputs.version 输出。
     required: false
