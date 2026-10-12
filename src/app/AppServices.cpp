@@ -133,9 +133,7 @@ AppServices::AppServices(const QSqlDatabase &database,
                                                                      parentObject);
         // 清空全部数据成功后退出应用（信号方式便于测试）
         QObject::connect(m_dangerousOperationService, &DangerousOperationService::quitRequested,
-                         this, []() {
-                             QCoreApplication::quit();
-                         });
+                         this, [this]() { quitImmediately(); });
         m_configCommandService = new ConfigCommandService(m_configRepository, parentObject);
         m_configImportExportService = new ConfigImportExportService(m_configRepository, m_daemonApi, parentObject);
         m_configListModel = new ConfigListModel(m_configCommandService, m_configImportExportService, parentObject);
@@ -343,7 +341,7 @@ void AppServices::ensureDaemonServiceOnce()
         QMessageBox::critical(nullptr,
                               QStringLiteral("后端程序缺失"),
                               missingText);
-        QCoreApplication::quit();
+        quitImmediately();
         return;
     }
 
@@ -375,7 +373,7 @@ void AppServices::ensureDaemonServiceOnce()
                                               QMessageBox::Yes | QMessageBox::No,
                                               QMessageBox::Yes);
     if (answer != QMessageBox::Yes) {
-        QCoreApplication::quit();
+        quitImmediately();
         return;
     }
 
@@ -392,7 +390,7 @@ void AppServices::ensureDaemonServiceOnce()
         QMessageBox::critical(nullptr,
                               QStringLiteral("后端服务启动失败"),
                               failureText);
-        QCoreApplication::quit();
+        quitImmediately();
     }
 }
 
@@ -403,10 +401,16 @@ void AppServices::setExitPromptHandler(ExitPromptHandler handler)
 
 bool AppServices::eventFilter(QObject *watched, QEvent *event)
 {
-    // macOS Cmd+Q / 系统退出：平台先发 QEvent::Quit 并在事件被接受时才真正终止进程。
-    // 这里 ignore() 让平台取消本次终止，再把请求转交统一的退出流程（确认 → 停 VPN 实例 → 退出）。
-    // 真正退出由流程末尾的 QCoreApplication::quit() 完成，不再经过本过滤器。
     if (event->type() == QEvent::Quit && watched == QCoreApplication::instance()) {
+        // 退出已获准：放行本次终止，由平台完成真正的退出。
+        // 必须放行的原因：macOS 上 QCoreApplication::quit() 本身就是"请求平台终止"，
+        // 平台随即投递这个 QEvent::Quit；若继续拦截，等于否决我们自己的退出请求，
+        // 应用会永远退不出去（表现为界面与托盘都消失、进程残留的"幽灵进程"）。
+        if (m_quitApproved)
+            return false;
+
+        // 用户发起的退出（Cmd+Q / 系统退出）：先忽略以取消本次平台终止（否则会绕过
+        // 退出确认直接结束进程），再把请求转交统一的退出流程（确认 → 停实例 → 获准退出）。
         event->ignore();
         QTimer::singleShot(0, this, [this]() { handleUserQuitRequest(); });
         return true;
@@ -450,7 +454,7 @@ void AppServices::stopRunningInstancesThenQuit()
     // 兜底超时：daemon 无响应时不把用户卡在关不掉的应用里。
     // （stopAll() 自身另有 30s 安全超时，这里只是把等待上限收得更短。）
     QTimer::singleShot(kQuitStopInstancesTimeoutMs, this, [this]() {
-        if (m_quitFinalized)
+        if (m_quitApproved)
             return;
         LogHelper::logWarning(QStringLiteral("退出前停止 VPN 实例超时，仍继续退出前端"), "AppServices");
         finishQuit();
@@ -472,12 +476,23 @@ void AppServices::stopRunningInstancesThenQuit()
 
 void AppServices::finishQuit()
 {
-    if (m_quitFinalized)
+    if (m_quitApproved)
         return;
 
-    m_quitFinalized = true;
+    // 先置位"已获准退出"再调用 quitApplication()：macOS 上 quitApplication() 里的
+    // QCoreApplication::quit() 会经平台终止流程再投递一次 QEvent::Quit，
+    // 事件过滤器必须据此放行（详见 eventFilter()）。
+    m_quitApproved = true;
     LogHelper::logInfo(QStringLiteral("正在退出前端程序"), "AppServices");
     m_systemTrayManager->quitApplication();
+}
+
+void AppServices::quitImmediately()
+{
+    // QCoreApplication::quit() 会向 application 对象投递 QEvent::Quit（eventFilter() 拦截的正是它），
+    // 先置位"已获准退出"让过滤器放行，否则程序自身的退出请求会被当成用户发起的退出而弹出确认框。
+    m_quitApproved = true;
+    QCoreApplication::quit();
 }
 
 AppServices::ExitPromptResult AppServices::showExitPromptDialog()
@@ -486,8 +501,6 @@ AppServices::ExitPromptResult AppServices::showExitPromptDialog()
     box.setWindowTitle(QStringLiteral("退出 QtEasyTier"));
     box.setIcon(QMessageBox::Information);
     box.setText(QStringLiteral("退出 QtEasyTier 会停止所有正在运行的 VPN 连接。"));
-    box.setInformativeText(QStringLiteral("后端服务不会被卸载，也不会要求管理员授权；下次启动时会自动重新连接。"
-                                          "只想关闭窗口时请点击「取消」，程序会留在系统托盘中继续运行。"));
 
     auto *checkBox = new QCheckBox(QStringLiteral("不再显示此提示"), &box);
     box.setCheckBox(checkBox);

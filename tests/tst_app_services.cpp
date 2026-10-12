@@ -127,6 +127,30 @@ private slots:
         // 请求转交 handleUserQuitRequest()，经 Qt::singleShot 延后一个事件循环执行
         QTRY_VERIFY_WITH_TIMEOUT(promptInvoked, 2000);
     }
+
+    /// 测试目标：用户在退出确认中取消后，"退出进行中"标记被解除，应用继续运行且能再次
+    /// 响应退出请求（不会因一次取消而永久忽略后续的 Cmd+Q / 托盘退出）
+    void cancelledExitPromptAllowsLaterQuitRequest()
+    {
+        QStandardPaths::setTestModeEnabled(true);
+        AppServices services(QSqlDatabase(), nullptr, AppServices::SkipDaemonConnection);
+
+        int promptCount = 0;
+        services.setExitPromptHandler([&promptCount]() {
+            ++promptCount;
+            return AppServices::ExitPromptResult{false, false};
+        });
+
+        QEvent firstQuitEvent(QEvent::Quit);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &firstQuitEvent);
+        QVERIFY(!firstQuitEvent.isAccepted());
+        QTRY_COMPARE_WITH_TIMEOUT(promptCount, 1, 2000);
+
+        QEvent secondQuitEvent(QEvent::Quit);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &secondQuitEvent);
+        QVERIFY(!secondQuitEvent.isAccepted());
+        QTRY_COMPARE_WITH_TIMEOUT(promptCount, 2, 2000);
+    }
 };
 
 QTEST_MAIN(TestAppServices)

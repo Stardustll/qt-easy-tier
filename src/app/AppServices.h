@@ -133,6 +133,9 @@ protected:
      *
      * 不拦截时 Cmd+Q 会绕过退出确认直接结束进程；这里改为忽略该事件（平台据此取消本次
      * 终止）并把请求转交 handleUserQuitRequest()，与托盘菜单"退出程序"走同一套流程。
+     *
+     * 注意：macOS 上 QCoreApplication::quit() 自身也是经平台终止流程投递 QEvent::Quit，
+     * 因此退出获准（m_quitApproved）后必须放行，否则应用永远退不出去。
      */
     bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -161,6 +164,16 @@ private:
 
     /// 真正退出前端程序；收敛完成与兜底超时两条路径都会到达，故须幂等。
     void finishQuit();
+
+    /**
+     * @brief 程序自身决定的退出：跳过退出确认与实例清理，立即结束进程。
+     *
+     * 用于致命错误（后端缺失/后端启动失败）与"清空全部数据"完成后的退出。这些场景已经
+     * 单独提示过用户，不应再弹一次退出确认框，更不能被用户取消而停留在不可用状态。
+     * 实现上先置位 m_quitApproved 再调用 QCoreApplication::quit()，避免被本类的
+     * eventFilter() 当成用户发起的退出请求拦截下来。
+     */
+    void quitImmediately();
 
     /// 显示退出提示弹窗，返回用户选择结果。
     ExitPromptResult showExitPromptDialog();
@@ -196,7 +209,8 @@ private:
     bool m_daemonServiceEnsureAttempted = false;
     /// 退出流程是否已在进行中：从进入确认阶段起置位，确认退出后保持置位以阻止重复进入
     bool m_quitFlowActive = false;
-    /// 是否已进入真正退出，避免"实例收敛"与"兜底超时"两条路径重复执行退出
-    bool m_quitFinalized = false;
+    /// 退出是否已获准（已决定真正退出）：既用于避免重复执行退出，也用于让事件过滤器
+    /// 放行平台随后投递的 QEvent::Quit —— 见 eventFilter() 的说明
+    bool m_quitApproved = false;
     ExitPromptHandler m_exitPromptHandler;
 };
