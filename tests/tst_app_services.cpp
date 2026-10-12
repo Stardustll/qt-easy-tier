@@ -13,6 +13,7 @@
 #include <QUrl>
 
 #include "app/AppServices.h"
+#include "log/LogDispatcher.h"
 #include "sqlite_repository/DatabaseConnection.h"
 #include "system_tray/TrayMessageDispatcher.h"
 #include "system_tray/TrayMessageSink.h"
@@ -36,6 +37,12 @@ private slots:
     void cleanup()
     {
         TrayMessageDispatcher::instance()->clearSinks();
+        // 日志分发器同理只持有裸指针：用例结束后 AppServices 已析构，若不清空，
+        // 下一个用例构造 AppServices 时（托盘不可用会打 Warning 日志）就会命中已释放的 sink
+        LogDispatcher::instance()->clearSinks();
+        // 退出拦截用例会临时开启测试模式以隔离真实配置目录；恢复放在 cleanup 而非用例内，
+        // 保证断言失败提前 return 时也能复位
+        QStandardPaths::setTestModeEnabled(false);
     }
 
     /// 测试目标：验证 AppServices 构造后有必需的 singleton 可用
@@ -119,8 +126,6 @@ private slots:
         QVERIFY(!quitEvent.isAccepted());
         // 请求转交 handleUserQuitRequest()，经 Qt::singleShot 延后一个事件循环执行
         QTRY_VERIFY_WITH_TIMEOUT(promptInvoked, 2000);
-
-        QStandardPaths::setTestModeEnabled(false);
     }
 };
 
