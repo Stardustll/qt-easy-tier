@@ -43,8 +43,8 @@ import urllib.request
 
 API_GITHUB = "https://api.github.com"
 API_CNB = os.environ.get("CNB_API_BASE", "https://api.cnb.cool")
-DEFAULT_GITHUB_REPO = "qteasytier/qt-easy-tier"
-DEFAULT_CNB_REPO = "myqfeng/qteasytier/qt-easy-tier"
+DEFAULT_GITHUB_REPO = "Stardustll/qt-easy-tier"
+DEFAULT_CNB_REPO = "tflystar/qt-easy-tier"
 USER_AGENT = "qt-easy-tier-cnb-mirror/1.0"
 GITHUB_PAGE_SIZE = 100
 CNB_PAGE_SIZE = 100
