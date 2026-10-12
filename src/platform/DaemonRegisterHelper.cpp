@@ -66,6 +66,27 @@ QString linuxDaemonBinaryPath()
 }
 #endif // Linux 专用（systemd 路径解析）
 
+// ========== 进程执行工具（平台无关，各平台分支复用） ==========
+// 捕获 stdout+stderr 并返回退出码是否为 0：Windows 查询服务状态、macOS 查询 launchd
+// 服务状态等需要读取输出的场景使用。
+bool runProcessWithOutput(const QString &program, const QStringList &arguments, QString *output,
+                          int timeoutMs = kProcessTimeoutMs)
+{
+    QProcess process;
+    process.start(program, arguments);
+    if (!process.waitForStarted(timeoutMs))
+        return false;
+    if (!process.waitForFinished(timeoutMs)) {
+        process.kill();
+        process.waitForFinished();
+        return false;
+    }
+    if (output)
+        *output = QString::fromLocal8Bit(process.readAllStandardOutput())
+                  + QString::fromLocal8Bit(process.readAllStandardError());
+    return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+}
+
 // ========== 进程执行与 shell 引用工具（Linux 与 macOS 共用） ==========
 #if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
 bool runProcess(const QString &program, const QStringList &arguments, int timeoutMs = kProcessTimeoutMs)
@@ -179,22 +200,6 @@ QString windowsDaemonBinaryPath()
     if (!g_daemonPathOverride.isEmpty())
         return g_daemonPathOverride;
     return QDir(QCoreApplication::applicationDirPath()).filePath(QLatin1String(kWindowsDaemonName));
-}
-
-bool runProcessWithOutput(const QString &program, const QStringList &arguments, QString *output, int timeoutMs = kProcessTimeoutMs)
-{
-    QProcess process;
-    process.start(program, arguments);
-    if (!process.waitForStarted(timeoutMs))
-        return false;
-    if (!process.waitForFinished(timeoutMs)) {
-        process.kill();
-        process.waitForFinished();
-        return false;
-    }
-    if (output)
-        *output = QString::fromLocal8Bit(process.readAllStandardOutput()) + QString::fromLocal8Bit(process.readAllStandardError());
-    return process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
 }
 
 bool runElevated(const QString &program, const QString &parameters, int timeoutMs = 120000)
@@ -346,6 +351,11 @@ QString installScriptContent(const QString &daemonSource, const QString &libSour
     stream << "PLIST=" << QLatin1String(kMacLaunchDaemonPlistPath) << "\n";
     // 清理可能存在的旧服务（失败不阻断后续步骤）
     stream << "/bin/launchctl bootout system/$LABEL 2>/dev/null || true\n";
+    // 清除 launchd 持久化的 disabled 覆盖：卸载流程执行过 `launchctl disable`，该标记会
+    // 持久保存在 launchd 覆盖库中；若不先清除，下面的 bootstrap 会因服务被禁用而失败，
+    // 配合 set -e 会直接中止脚本，导致随后的 enable/kickstart 永不执行 —— 表现为
+    // "管理员授权成功但前端连不上后端"（服务注册不上、进程起不来）。
+    stream << "/bin/launchctl enable system/$LABEL 2>/dev/null || true\n";
     stream << "/usr/bin/install -d -m 0755 -o root -g wheel /Library/PrivilegedHelperTools\n";
     stream << "/usr/bin/install -m 0755 -o root -g wheel " << shellQuote(daemonSource) << " \"$HELPER\"\n";
     // 清除从 .app 继承的 quarantine 标记，否则 launchd 可能拒绝执行
@@ -360,7 +370,8 @@ QString installScriptContent(const QString &daemonSource, const QString &libSour
     stream << "fi\n";
     stream << "/usr/bin/install -m 0644 -o root -g wheel " << shellQuote(plistSource) << " \"$PLIST\"\n";
     stream << "/usr/bin/xattr -cr \"$PLIST\" 2>/dev/null || true\n";
-    stream << "/bin/launchctl bootstrap system \"$PLIST\"\n";
+    // bootstrap 在"服务已加载"时会返回非零，不应因此中止脚本；最终以 kickstart 的成败为准
+    stream << "/bin/launchctl bootstrap system \"$PLIST\" 2>/dev/null || true\n";
     stream << "/bin/launchctl enable system/$LABEL\n";
     stream << "/bin/launchctl kickstart -k system/$LABEL\n";
     stream.flush();
@@ -413,8 +424,14 @@ bool installAndStartLaunchDaemon()
 
 bool startLaunchDaemon()
 {
-    const QString shellCommand = QStringLiteral("/bin/launchctl kickstart -k system/%1")
-                                     .arg(QLatin1String(kMacLaunchDaemonLabel));
+    // 仅 kickstart 不够：若该 label 处于 disabled（卸载流程遗留的持久覆盖）或未被 launchd
+    // 加载（例如上次安装 bootstrap 失败只留下 plist），kickstart 会直接失败。先 enable 清除
+    // disabled 覆盖，再尝试 bootstrap（已加载时返回非零，忽略），最后以 kickstart 为准。
+    const QString shellCommand =
+        QStringLiteral("/bin/launchctl enable system/%1 2>/dev/null || true; "
+                       "/bin/launchctl bootstrap system %2 2>/dev/null || true; "
+                       "/bin/launchctl kickstart -k system/%1")
+            .arg(QLatin1String(kMacLaunchDaemonLabel), shellQuote(QLatin1String(kMacLaunchDaemonPlistPath)));
     const QString appleScript = QStringLiteral("do shell script \"%1\" with administrator privileges").arg(shellCommand);
     return runProcess(QStringLiteral("/usr/bin/osascript"), {QStringLiteral("-e"), appleScript}, 120000);
 }
@@ -611,8 +628,16 @@ bool DaemonRegisterHelper::isDaemonProcessRunning()
 #elif defined(Q_OS_MACOS)
     if (g_processRunningOverrideEnabled)
         return g_processRunningOverride;
-    // macOS 无 pidof，使用 pgrep 精确匹配进程名
-    return runProcess(QStringLiteral("/usr/bin/pgrep"), {QStringLiteral("-x"), QLatin1String(kDaemonName)}, 5000);
+    // 注意不能用 `pgrep -x qtet-daemon`：helper 安装名为 cn.qtet.qteasytier.daemon
+    // （非 qtet-daemon），进程名匹配永远失败 → 会被误判为"已注册但未运行"，前端因而
+    // 反复 kickstart 且始终显示未安装。改用 launchctl 查询 launchd 中该服务的真实状态：
+    // 退出码为 0 表示已加载，输出含 "state = running" 才表示进程正在运行。
+    QString output;
+    const QString target = QStringLiteral("system/") + QLatin1String(kMacLaunchDaemonLabel);
+    if (!runProcessWithOutput(QStringLiteral("/bin/launchctl"),
+                              {QStringLiteral("print"), target}, &output, 5000))
+        return false;
+    return output.contains(QStringLiteral("state = running"));
 #else
     return false;
 #endif

@@ -268,6 +268,12 @@ private slots:
         // 以 root 安装 helper 到稳定路径 + 注册 LaunchDaemon
         QVERIFY(content.contains(QStringLiteral("/Library/PrivilegedHelperTools/cn.qtet.qteasytier.daemon")));
         QVERIFY(content.contains(QStringLiteral("launchctl bootstrap system")));
+        // 必须先 enable 清除 launchd 持久化的 disabled 覆盖，否则（曾卸载过该服务的机器上）
+        // bootstrap 会失败并被 set -e 中止，导致服务注册不上、前端"授权成功却连不上后端"
+        const int enablePos = content.indexOf(QStringLiteral("launchctl enable system/$LABEL"));
+        const int bootstrapPos = content.indexOf(QStringLiteral("launchctl bootstrap system"));
+        QVERIFY2(enablePos >= 0 && bootstrapPos >= 0 && enablePos < bootstrapPos,
+                 qPrintable(QStringLiteral("安装脚本须先 enable 再 bootstrap:\n%1").arg(content)));
         // 传入的 daemon 源路径与 plist 源路径均被引用
         QVERIFY(content.contains(m_daemonPath));
         QVERIFY(content.contains(plistPath));

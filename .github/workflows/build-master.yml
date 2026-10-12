@@ -173,11 +173,18 @@ jobs:
           bash "${{ github.workspace }}/package/macos/build_macos.sh" \
             -v "${{ steps.build.outputs.version }}"
 
-      - name: Upload artifacts
+      # dmg 与 zip 分成两个独立 artifact 上传：github 的 artifact 本身即一个 zip，
+      # 合并上传会导致 dmg 和 zip 被打进同一个压缩包里，不便单独下载
+      - name: Upload dmg
         uses: actions/upload-artifact@v4
         with:
-          name: qteasytier-v${{ steps.build.outputs.version }}-macos-universal
-          path: |
-            build/Output/qteasytier_v${{ steps.build.outputs.version }}_macos_universal.zip
-            build/Output/qteasytier_v${{ steps.build.outputs.version }}_macos_universal.dmg
+          name: qteasytier-v${{ steps.build.outputs.version }}-macos-universal-dmg
+          path: build/Output/qteasytier_v${{ steps.build.outputs.version }}_macos_universal.dmg
+          if-no-files-found: error
+
+      - name: Upload zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: qteasytier-v${{ steps.build.outputs.version }}-macos-universal-zip
+          path: build/Output/qteasytier_v${{ steps.build.outputs.version }}_macos_universal.zip
           if-no-files-found: error
