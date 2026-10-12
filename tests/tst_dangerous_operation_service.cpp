@@ -231,7 +231,7 @@ private slots:
         DangerousOperationService service(&runtime, &configRepo, &favoriteRepo, &logRepo, QString());
 
 
-#if defined(Q_OS_LINUX) || defined(Q_OS_WIN)
+#if defined(Q_OS_LINUX) || defined(Q_OS_WIN) || defined(Q_OS_MACOS)
 #if defined(Q_OS_WIN)
         const QString daemonPath = QDir(tempDir.path()).filePath(QStringLiteral("qtet-daemon.exe"));
 #else
@@ -241,16 +241,26 @@ private slots:
 #if defined(Q_OS_LINUX)
         const QString servicePath = QDir(tempDir.path()).filePath(QStringLiteral("qtet-daemon.service"));
         DaemonRegisterHelper::setSystemdServicePathOverrideForTesting(servicePath);
+#elif defined(Q_OS_MACOS)
+        // macOS 的"服务文件"是 LaunchDaemon plist；未创建即视为未注册
+        const QString servicePath = QDir(tempDir.path()).filePath(QStringLiteral("cn.qtet.qteasytier.daemon.plist"));
+        DaemonRegisterHelper::setLaunchDaemonPlistPathOverrideForTesting(servicePath);
+        // requiredAction() 在 macOS 下还会校验 daemon 依赖的 EasyTier FFI 动态库
+        // （lib 路径由 daemon 所在目录推导），预先放置同名占位文件
+        QFile libFile(QDir(tempDir.path()).filePath(QStringLiteral("libeasytier_ffi.dylib")));
+        QVERIFY(libFile.open(QIODevice::WriteOnly));
+        libFile.close();
 #endif
         // 创建 daemon 二进制文件
         QFile daemonFile(daemonPath);
         QVERIFY(daemonFile.open(QIODevice::WriteOnly));
         daemonFile.close();
-#if defined(Q_OS_LINUX)
+#if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
+        // requiredAction() 要求 daemon 二进制可执行
         QVERIFY(daemonFile.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
 #endif
         // 二进制可用但未注册 → 仅安装可用
-        // Linux 下未创建 service 文件即视为未注册；Windows 通过测试 override 模拟
+        // Linux/macOS 下未创建"服务文件"即视为未注册；Windows 通过测试 override 模拟
 #if defined(Q_OS_WIN)
         DaemonRegisterHelper::setServiceRegisteredOverrideForTesting(true, false);
 #endif
@@ -260,8 +270,8 @@ private slots:
         QVERIFY(service.daemonOperationEnabled());
 
         // 已注册且运行中 → 按钮切换为卸载且可用
-#if defined(Q_OS_LINUX)
-        // Linux 下创建 service 文件即视为已注册
+#if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
+        // Linux/macOS 下创建"服务文件"（systemd unit / LaunchDaemon plist）即视为已注册
         QFile serviceFile(servicePath);
         QVERIFY(serviceFile.open(QIODevice::WriteOnly | QIODevice::Text));
         serviceFile.write("[Unit]\nDescription=EasyTier Service\n");
@@ -282,6 +292,8 @@ private slots:
         DaemonRegisterHelper::setDaemonProcessRunningOverrideForTesting(false, false);
 #if defined(Q_OS_LINUX)
         DaemonRegisterHelper::setSystemdServicePathOverrideForTesting(QString());
+#elif defined(Q_OS_MACOS)
+        DaemonRegisterHelper::setLaunchDaemonPlistPathOverrideForTesting(QString());
 #endif
 #else
         // 其他平台不支持后端管理，操作不可用
