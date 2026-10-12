@@ -26,7 +26,7 @@
   name: 同步代码到 GitHub
   image: tencentcom/git-sync
   settings:
-    target_url: https://github.com/qteasytier/qt-easy-tier.git
+    target_url: https://github.com/Stardustll/qt-easy-tier.git
     auth_type: https
     username: ${GIT_USERNAME}
     password: ${GIT_ACCESS_TOKEN}
@@ -42,7 +42,7 @@
   name: 从 GitHub 同步代码
   image: tencentcom/git-sync
   settings:
-    target_url: https://github.com/qteasytier/qt-easy-tier.git
+    target_url: https://github.com/Stardustll/qt-easy-tier.git
     auth_type: https
     username: ${GIT_USERNAME}
     password: ${GIT_ACCESS_TOKEN}
@@ -72,7 +72,7 @@
       runner:
         cpus: 1
       imports:
-        - https://cnb.cool/myqfeng/keys/-/blob/main/github.yml
+        - https://cnb.cool/tflystar/keys/-/blob/main/github.yml
       stages:
         - *st-sync-push
 
@@ -82,7 +82,7 @@
       runner:
         cpus: 1
       imports:
-        - https://cnb.cool/myqfeng/keys/-/blob/main/github.yml
+        - https://cnb.cool/tflystar/keys/-/blob/main/github.yml
       stages:
         - *st-sync-pull
 
