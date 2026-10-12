@@ -55,8 +55,12 @@ QString LanguageController::resolvedLocale(const QString &language) const
     if (language == QLatin1String("zh_TW") || language == QLatin1String("en"))
         return language;
 
-    // system 与 zh_CN 统一按系统 locale 推导：zh_CN 显式选择时视为简体源
-    if (language != QLatin1String("system") && language != QLatin1String("zh_CN"))
+    // 显式选择简体中文即固定用简体源（源语言），不再回落到系统 locale
+    if (language == QLatin1String("zh_CN"))
+        return QStringLiteral("zh_CN");
+
+    // 其余非法值按 system 处理，随系统 locale 推导
+    if (language != QLatin1String("system"))
         return QStringLiteral("zh_CN");
 
     const QLocale locale = QLocale::system();
