@@ -127,6 +127,15 @@ public:
     /** @brief 设置退出提示处理函数（仅用于测试） */
     void setExitPromptHandler(ExitPromptHandler handler);
 
+protected:
+    /**
+     * @brief 拦截 macOS 的 Cmd+Q（平台以 QEvent::Quit 投递到 application 对象）
+     *
+     * 不拦截时 Cmd+Q 会绕过退出确认直接结束进程；这里改为忽略该事件（平台据此取消本次
+     * 终止）并把请求转交 handleUserQuitRequest()，与托盘菜单"退出程序"走同一套流程。
+     */
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private:
     /// 返回服务对象的父级（优先使用 QML 引擎，确保生命周期由引擎管理）
     QObject *serviceParent() const;
@@ -143,8 +152,15 @@ private:
     /// daemon 断开时尝试确保系统服务已注册并启动（每次应用生命周期最多一次）
     void ensureDaemonServiceOnce();
 
-    /// 处理托盘菜单用户退出请求：按设置决定是否显示退出提示。
+    /// 处理托盘菜单/系统快捷键的用户退出请求：按设置决定是否显示退出提示。
     void handleUserQuitRequest();
+
+    /// 退出前停止所有正在运行的 VPN 实例（实际停止由 root 权限的 daemon 执行，前端不提权），
+    /// 待其收敛或超时后调用 finishQuit()。
+    void stopRunningInstancesThenQuit();
+
+    /// 真正退出前端程序；收敛完成与兜底超时两条路径都会到达，故须幂等。
+    void finishQuit();
 
     /// 显示退出提示弹窗，返回用户选择结果。
     ExitPromptResult showExitPromptDialog();
@@ -178,5 +194,9 @@ private:
     LanguageController *m_languageController = nullptr;
     SystemTrayManager *m_systemTrayManager = nullptr;
     bool m_daemonServiceEnsureAttempted = false;
+    /// 退出流程是否已在进行中：从进入确认阶段起置位，确认退出后保持置位以阻止重复进入
+    bool m_quitFlowActive = false;
+    /// 是否已进入真正退出，避免"实例收敛"与"兜底超时"两条路径重复执行退出
+    bool m_quitFinalized = false;
     ExitPromptHandler m_exitPromptHandler;
 };

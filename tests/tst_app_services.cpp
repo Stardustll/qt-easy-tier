@@ -2,9 +2,12 @@
  * @file tst_app_services.cpp
  * @brief 应用服务装配层模块的单元测试。测试内容：AppServices 构造后暴露必需单例、错误与导入通知经装配层转发到系统托盘。
  */
+#include <QCoreApplication>
 #include <QSqlDatabase>
 #include <QDir>
+#include <QEvent>
 #include <QFile>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QUrl>
@@ -92,6 +95,32 @@ private slots:
         QCOMPARE(sink.messages.first().level, TrayMessageLevel::Info);
         QCOMPARE(sink.messages.first().title, QStringLiteral("节点导入完成"));
         QCOMPARE(sink.messages.first().message, QStringLiteral("已导入 1 个节点，跳过 0 个节点"));
+    }
+
+    /// 测试目标：macOS 的 Cmd+Q（application 收到的 QEvent::Quit）被拦截并转交统一退出流程，
+    /// 而不是绕过退出确认直接结束进程
+    void quitEventIsInterceptedAndRoutedToExitFlow()
+    {
+        // 隔离真实配置目录：保证 showExitPrompt 为默认值（true）且测试不写用户设置
+        QStandardPaths::setTestModeEnabled(true);
+        AppServices services(QSqlDatabase(), nullptr, AppServices::SkipDaemonConnection);
+
+        bool promptInvoked = false;
+        // 返回"用户取消"：退出流程到此结束，测试期间不会真的退出应用
+        services.setExitPromptHandler([&promptInvoked]() {
+            promptInvoked = true;
+            return AppServices::ExitPromptResult{false, false};
+        });
+
+        QEvent quitEvent(QEvent::Quit);
+        QCoreApplication::sendEvent(QCoreApplication::instance(), &quitEvent);
+
+        // 事件被 ignore：平台据此取消本次终止（接受则直接退出，跳过确认与后端清理）
+        QVERIFY(!quitEvent.isAccepted());
+        // 请求转交 handleUserQuitRequest()，经 Qt::singleShot 延后一个事件循环执行
+        QTRY_VERIFY_WITH_TIMEOUT(promptInvoked, 2000);
+
+        QStandardPaths::setTestModeEnabled(false);
     }
 };
 
